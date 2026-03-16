@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LIVE DISPLAY</title>
+<script src="https://cdn.jsdelivr.net/npm/ably@2/ably.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: #080808;
+    overflow: hidden;
+    font-family: 'Space Mono', monospace;
+  }
+
+  .stage {
+    width: 100vw;
+    height: 100vh;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding: 24px;
+    gap: 16px;
+  }
+
+  /* ─── LEFT PANEL ─── */
+  .video-panel {
+    position: relative;
+    background: #0e0e0e;
+    border: 1px solid #1c1c1c;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .upload-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    color: #2a2a2a;
+    transition: color 0.3s;
+    user-select: none;
+  }
+  .video-panel:hover .upload-zone { color: #555; }
+
+  .upload-cross {
+    width: 56px; height: 56px;
+    position: relative;
+  }
+  .upload-cross::before,
+  .upload-cross::after {
+    content: '';
+    position: absolute;
+    background: currentColor;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+  }
+  .upload-cross::before { width: 1px; height: 100%; }
+  .upload-cross::after  { width: 100%; height: 1px; }
+
+  .upload-label {
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+  }
+
+  #video-el {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: none;
+  }
+
+  #file-input { display: none; }
+
+  .panel-tag {
+    position: absolute;
+    top: 14px; left: 14px;
+    font-size: 8px;
+    letter-spacing: 0.2em;
+    color: #252525;
+    text-transform: uppercase;
+    z-index: 5;
+  }
+
+  /* ─── RIGHT PANEL ─── */
+  .doc-panel {
+    background: #0e0e0e;
+    border: 1px solid #1c1c1c;
+    display: flex;
+    flex-direction: column;
+    padding: 28px 32px 24px;
+    overflow: hidden;
+  }
+
+  .doc-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #161616;
+    margin-bottom: 24px;
+    flex-shrink: 0;
+  }
+
+  .doc-meta { display: flex; flex-direction: column; gap: 6px; }
+
+  .doc-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    letter-spacing: 0.06em;
+    color: #e8e8e8;
+    line-height: 1;
+  }
+
+  .doc-status {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .dot {
+    width: 5px; height: 5px;
+    background: #e8e8e8;
+    border-radius: 50%;
+    animation: throb 2s ease-in-out infinite;
+  }
+  @keyframes throb {
+    0%,100% { opacity: 1; }
+    50%      { opacity: 0.15; }
+  }
+
+  .status-label {
+    font-size: 8px;
+    letter-spacing: 0.2em;
+    color: #383838;
+    text-transform: uppercase;
+  }
+
+  /* QR */
+  .qr-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .qr-box {
+    width: 84px; height: 84px;
+    background: #f0f0f0;
+    padding: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #qr-canvas { width: 72px; height: 72px; image-rendering: pixelated; }
+
+  .qr-label {
+    font-size: 7px;
+    letter-spacing: 0.18em;
+    color: #2e2e2e;
+    text-transform: uppercase;
+    text-align: center;
+  }
+
+  /* TEXT AREA */
+  .text-scroll {
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+  .text-scroll::-webkit-scrollbar { display: none; }
+
+  #live-text {
+    font-family: 'Space Mono', monospace;
+    font-size: clamp(16px, 2.2vw, 28px);
+    line-height: 1.65;
+    color: #d8d8d8;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+
+  .cursor {
+    display: inline-block;
+    width: 0.55em; height: 1.1em;
+    background: #d8d8d8;
+    vertical-align: text-bottom;
+    animation: blink 1s step-end infinite;
+    margin-left: 2px;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  /* FOOTER */
+  .doc-footer {
+    flex-shrink: 0;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #161616;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .footer-stat {
+    font-size: 8px;
+    letter-spacing: 0.15em;
+    color: #2a2a2a;
+    text-transform: uppercase;
+  }
+
+  #char-count { color: #363636; }
+
+  /* connection badge */
+  .conn-badge {
+    font-size: 8px;
+    letter-spacing: 0.12em;
+    color: #2a2a2a;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border: 1px solid #1c1c1c;
+  }
+  .conn-badge.connected { color: #555; border-color: #2a2a2a; }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <!-- LEFT: VIDEO -->
+  <div class="video-panel" id="video-panel" onclick="document.getElementById('file-input').click()">
+    <span class="panel-tag">— video</span>
+    <input type="file" id="file-input" accept="video/*">
+    <div class="upload-zone" id="upload-zone">
+      <div class="upload-cross"></div>
+      <span class="upload-label">点击上传视频</span>
+    </div>
+    <video id="video-el" autoplay loop muted playsinline></video>
+  </div>
+
+  <!-- RIGHT: LIVE DOC -->
+  <div class="doc-panel">
+    <div class="doc-top">
+      <div class="doc-meta">
+        <div class="doc-title">LIVE DOC</div>
+        <div class="doc-status">
+          <div class="dot"></div>
+          <span class="status-label">实时同步中</span>
+        </div>
+      </div>
+      <div class="qr-wrap">
+        <div class="qr-box">
+          <canvas id="qr-canvas"></canvas>
+        </div>
+        <div class="qr-label">扫码参与</div>
+      </div>
+    </div>
+
+    <div class="text-scroll" id="text-scroll">
+      <div id="live-text"><span class="cursor"></span></div>
+    </div>
+
+    <div class="doc-footer">
+      <span class="footer-stat">字数 <span id="char-count">0</span></span>
+      <span class="conn-badge" id="conn-badge">连接中…</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── VIDEO UPLOAD ──
+  const fileInput = document.getElementById('file-input');
+  const videoEl  = document.getElementById('video-el');
+  const uploadZone = document.getElementById('upload-zone');
+
+  fileInput.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    videoEl.src = URL.createObjectURL(file);
+    videoEl.style.display = 'block';
+    uploadZone.style.display = 'none';
+  });
+
+  // ── QR CODE ──
+  const mobileURL = window.location.href.replace('tv.html', 'mobile.html');
+  QRCode.toCanvas(document.getElementById('qr-canvas'), mobileURL, {
+    width: 72,
+    margin: 0,
+    color: { dark: '#080808', light: '#f0f0f0' }
+  });
+
+  // ── ABLY REALTIME ──
+  const ABLY_KEY = '7QGBGw.Vz9tfw:4309G68-vx0dcWNUgJI2Vqi4qaAp-4Gpb2f2ULRMb4o';
+  const ably = new Ably.Realtime({ key: ABLY_KEY });
+  const channel = ably.channels.get('livedoc');
+
+  const liveText  = document.getElementById('live-text');
+  const charCount = document.getElementById('char-count');
+  const connBadge = document.getElementById('conn-badge');
+  const scroll    = document.getElementById('text-scroll');
+
+  let currentText = '';
+
+  ably.connection.on('connected', () => {
+    connBadge.textContent = '已连接';
+    connBadge.classList.add('connected');
+  });
+
+  ably.connection.on('disconnected', () => {
+    connBadge.textContent = '已断开';
+    connBadge.classList.remove('connected');
+  });
+
+  channel.subscribe('update', msg => {
+    currentText = msg.data || '';
+    renderText(currentText);
+  });
+
+  channel.subscribe('clear', () => {
+    currentText = '';
+    renderText('');
+  });
+
+  function renderText(text) {
+    charCount.textContent = text.length;
+    liveText.innerHTML = '';
+    if (text) {
+      liveText.appendChild(document.createTextNode(text));
+    }
+    const cur = document.createElement('span');
+    cur.className = 'cursor';
+    liveText.appendChild(cur);
+    scroll.scrollTop = scroll.scrollHeight;
+  }
+</script>
+</body>
+</html>
