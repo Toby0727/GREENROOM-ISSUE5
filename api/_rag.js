@@ -63,13 +63,25 @@ function tokenize(text) {
 
 function lexicalScore(query, text) {
   const queryTokens = tokenize(query);
-  const textTokens = new Set(tokenize(text));
+  const textTokensArray = tokenize(text);
+  const textTokens = new Set(textTokensArray);
 
   if (!queryTokens.length || !textTokens.size) return 0;
 
   let matches = 0;
   for (const token of queryTokens) {
-    if (textTokens.has(token)) matches += 1;
+    if (textTokens.has(token)) {
+      matches += 1;
+      continue;
+    }
+
+    if (token.length >= 4) {
+      const hasPrefixMatch = textTokensArray.some(textToken => {
+        if (textToken.length < 4) return false;
+        return textToken.startsWith(token) || token.startsWith(textToken);
+      });
+      if (hasPrefixMatch) matches += 1;
+    }
   }
 
   return matches / queryTokens.length;
@@ -205,6 +217,33 @@ function selectBestSentences(message, contextChunks) {
   return unique;
 }
 
+function selectBestExcerpt(message, contextChunks) {
+  const candidates = [];
+
+  contextChunks.forEach(chunk => {
+    const rawParts = String(chunk.text || '')
+      .split(/\n+/)
+      .map(part => part.trim())
+      .filter(Boolean);
+
+    rawParts.forEach(part => {
+      const score = lexicalScore(message, part);
+      if (score > 0 && part.length >= 30) {
+        candidates.push({ text: part, score });
+      }
+    });
+  });
+
+  if (!candidates.length) return '';
+
+  candidates.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return b.text.length - a.text.length;
+  });
+
+  return candidates[0].text;
+}
+
 function buildLocalAnswer(message, contextChunks) {
   if (!contextChunks.length) {
     return 'I do not have enough uploaded material yet.';
@@ -215,7 +254,28 @@ function buildLocalAnswer(message, contextChunks) {
     return limitReply(bestSentences.join(' '));
   }
 
-  return limitReply(contextChunks.slice(0, 2).map(chunk => chunk.text).join(' '));
+  const excerpt = selectBestExcerpt(message, contextChunks);
+  if (excerpt) {
+    return limitReply(excerpt);
+  }
+
+  const fallbackLines = String(contextChunks[0]?.text || '')
+    .split(/\n+/)
+    .map(line => line.trim())
+    .filter(line => {
+      if (!line) return false;
+      if (line.length < 20) return false;
+      if (/^section\s+\d+/i.test(line)) return false;
+      if (/^[a-z]+:\s*$/i.test(line)) return false;
+      return true;
+    })
+    .slice(0, 2);
+
+  if (fallbackLines.length) {
+    return limitReply(fallbackLines.join(' '));
+  }
+
+  return 'I do not have enough uploaded material yet.';
 }
 
 function getConversation(sessionId) {
@@ -318,6 +378,26 @@ function contextMatchesQuestion(question, chunks, minScore = 0.2) {
   if (!chunks.length) return false;
   const merged = chunks.map(chunk => `${chunk.title} ${chunk.text}`).join(' ');
   return lexicalScore(question, merged) >= minScore;
+}
+
+function filterChunksByMentionedTitle(question, chunks) {
+  if (!chunks.length) return chunks;
+
+  const queryTokens = new Set(tokenize(question));
+  if (!queryTokens.size) return chunks;
+
+  const matchedTitles = new Set(
+    chunks
+      .map(chunk => chunk.title)
+      .filter(title => {
+        const titleBase = String(title || '').replace(/\.[^.]+$/, '');
+        const titleTokens = tokenize(titleBase);
+        return titleTokens.some(token => queryTokens.has(token));
+      })
+  );
+
+  if (!matchedTitles.size) return chunks;
+  return chunks.filter(chunk => matchedTitles.has(chunk.title));
 }
 
 async function pathExists(filePath) {
@@ -626,6 +706,11 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
 
     contextChunks = lexicalMatches;
     conversation.lastContextChunkIds = lexicalMatches.map(chunk => chunk.id);
+  }
+
+  contextChunks = filterChunksByMentionedTitle(message, contextChunks);
+  if (contextChunks.length > 0) {
+    conversation.lastContextChunkIds = contextChunks.map(chunk => chunk.id);
   }
 
   conversation.lastUserQuestion = message;
