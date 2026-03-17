@@ -7,7 +7,10 @@ const EMBEDDING_MODEL = 'text-embedding-3-small';
 const DB_KEY = '__greenroom_rag_db__';
 const WORKSPACE_ROOT = process.cwd();
 const WORKSPACE_DOC_DIRS = ['.rag-docs', 'writings', 'knowledge', 'docs'];
+const PRELOAD_DOC_CANDIDATES = ['.rag-docs/green room.txt', '.rag-docs/greenroom.txt'];
 const TEXT_FILE_EXTENSIONS = new Set(['.txt', '.md', '.markdown', '.text']);
+const LOCAL_EMBEDDING_DIMS = 256;
+let preloadPromise = null;
 
 function getDb() {
   if (!globalThis[DB_KEY]) {
@@ -68,6 +71,33 @@ function lexicalScore(query, text) {
   }
 
   return matches / queryTokens.length;
+}
+
+function hashToken(token) {
+  let hash = 2166136261;
+  for (let i = 0; i < token.length; i++) {
+    hash ^= token.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return Math.abs(hash >>> 0);
+}
+
+function buildLocalEmbedding(text) {
+  const vector = new Array(LOCAL_EMBEDDING_DIMS).fill(0);
+  const tokens = tokenize(text);
+
+  if (!tokens.length) return vector;
+
+  for (const token of tokens) {
+    const hash = hashToken(token);
+    const index = hash % LOCAL_EMBEDDING_DIMS;
+    vector[index] += 1;
+  }
+
+  const norm = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0));
+  if (!norm) return vector;
+
+  return vector.map(value => value / norm);
 }
 
 function splitIntoSentences(text) {
@@ -133,6 +163,10 @@ async function openAiJson(path, payload) {
 }
 
 async function embedTexts(texts) {
+  if (!canUseOpenAi()) {
+    return texts.map(text => buildLocalEmbedding(text));
+  }
+
   const data = await openAiJson('/embeddings', {
     model: EMBEDDING_MODEL,
     input: texts
@@ -142,6 +176,44 @@ async function embedTexts(texts) {
 
 function canUseOpenAi() {
   return Boolean(process.env.OPENAI_API_KEY);
+}
+
+function selectBestSentences(message, contextChunks) {
+  const candidates = [];
+
+  contextChunks.forEach(chunk => {
+    splitIntoSentences(chunk.text).forEach(sentence => {
+      const score = lexicalScore(message, sentence);
+      if (score > 0) {
+        candidates.push({ sentence, score });
+      }
+    });
+  });
+
+  const unique = [];
+  const seen = new Set();
+  for (const item of candidates.sort((a, b) => b.score - a.score)) {
+    const key = item.sentence.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(item.sentence.trim());
+    if (unique.length >= 2) break;
+  }
+
+  return unique;
+}
+
+function buildLocalAnswer(message, contextChunks) {
+  if (!contextChunks.length) {
+    return 'I do not have enough uploaded material yet.';
+  }
+
+  const bestSentences = selectBestSentences(message, contextChunks);
+  if (bestSentences.length) {
+    return limitReply(bestSentences.join(' '));
+  }
+
+  return limitReply(contextChunks.slice(0, 2).map(chunk => chunk.text).join(' '));
 }
 
 function getConversation(sessionId) {
@@ -332,6 +404,26 @@ async function getWorkspaceSignature() {
   return parts.sort().join('|');
 }
 
+async function resolvePreloadSources() {
+  const sources = [];
+
+  for (const relPath of PRELOAD_DOC_CANDIDATES) {
+    const absPath = path.join(WORKSPACE_ROOT, relPath);
+    if (!await pathExists(absPath)) continue;
+
+    const content = await fs.readFile(absPath, 'utf8');
+    if (!String(content).trim()) continue;
+
+    sources.push({
+      title: path.basename(absPath),
+      content,
+      sourcePath: relPath
+    });
+  }
+
+  return sources;
+}
+
 async function rebuildDatabaseFromSources(sources) {
   const db = getDb();
   db.documents = [];
@@ -364,9 +456,8 @@ export async function uploadDocument({ title, content, sourcePath = null }) {
     throw new Error('Could not create chunks from document content');
   }
 
-  const embeddings = canUseOpenAi()
-    ? await embedTexts(chunks)
-    : chunks.map(() => null);
+  const embeddings = await embedTexts(chunks);
+  const embeddingProvider = canUseOpenAi() ? 'openai' : 'local';
   const db = getDb();
   const documentId = `doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -385,7 +476,8 @@ export async function uploadDocument({ title, content, sourcePath = null }) {
     sourcePath,
     createdAt: Date.now(),
     chunkCount: chunkRecords.length,
-    embeddingBacked: canUseOpenAi()
+    embeddingBacked: true,
+    embeddingProvider
   });
   db.chunks.push(...chunkRecords);
 
@@ -394,7 +486,8 @@ export async function uploadDocument({ title, content, sourcePath = null }) {
     title: cleanTitle,
     sourcePath,
     chunkCount: chunkRecords.length,
-    embeddingBacked: canUseOpenAi()
+    embeddingBacked: true,
+    embeddingProvider
   };
 }
 
@@ -415,7 +508,8 @@ export async function syncWorkspaceDocuments() {
       title: doc.title,
       sourcePath: doc.sourcePath,
       chunkCount: doc.chunkCount,
-      embeddingBacked: doc.embeddingBacked
+      embeddingBacked: doc.embeddingBacked,
+      embeddingProvider: doc.embeddingProvider
     }))
   };
 }
@@ -430,6 +524,22 @@ export async function inspectWorkspaceState() {
 
 export async function ensureWorkspaceDocumentsIndexed() {
   const db = getDb();
+
+  const preloadSources = await resolvePreloadSources();
+  if (preloadSources.length > 0) {
+    const preloadSignature = preloadSources
+      .map(source => `${source.sourcePath}:${source.content.length}`)
+      .sort()
+      .join('|');
+
+    if (db.workspaceSignature !== preloadSignature || db.documents.length === 0) {
+      await rebuildDatabaseFromSources(preloadSources);
+      db.workspaceSignature = preloadSignature;
+    }
+
+    return db.documents;
+  }
+
   const signature = await getWorkspaceSignature();
 
   if (!signature) {
@@ -446,6 +556,12 @@ export async function ensureWorkspaceDocumentsIndexed() {
 
   await syncWorkspaceDocuments();
   return db.documents;
+}
+
+function preloadInBackground() {
+  if (preloadPromise) return preloadPromise;
+  preloadPromise = ensureWorkspaceDocumentsIndexed().catch(() => []);
+  return preloadPromise;
 }
 
 export async function listDocuments() {
@@ -475,7 +591,7 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
 
   if (!contextChunks.length) {
     const vectorChunks = db.chunks.filter(chunk => Array.isArray(chunk.embedding));
-    if (vectorChunks.length > 0 && canUseOpenAi()) {
+    if (vectorChunks.length > 0) {
       const [questionEmbedding] = await embedTexts([message]);
       const scored = vectorChunks
         .map(chunk => ({
@@ -521,15 +637,14 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
     { role: 'user', content: message }
   ];
 
-  const data = await openAiJson('/chat/completions', {
-    model: CHAT_MODEL,
-    messages: promptMessages,
-    max_tokens: 180,
-    temperature: 0.3
-  });
-
-  const rawReply = data?.choices?.[0]?.message?.content || '';
-  const reply = limitReply(rawReply);
+  const reply = canUseOpenAi()
+    ? limitReply((await openAiJson('/chat/completions', {
+        model: CHAT_MODEL,
+        messages: promptMessages,
+        max_tokens: 180,
+        temperature: 0.3
+      }))?.choices?.[0]?.message?.content || '')
+    : buildLocalAnswer(message, contextChunks);
 
   const citations = contextChunks.map(c => ({
     documentId: c.documentId,
@@ -543,3 +658,5 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
     citations
   };
 }
+
+preloadInBackground();
