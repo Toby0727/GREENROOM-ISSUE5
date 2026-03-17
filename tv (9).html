@@ -73,29 +73,29 @@
   .msg-meta .sep  { color: #1e1e1e; }
   .msg-meta .device { color: #2a2a2a; }
   .msg-meta .time { color: #222; }
-  .msg-meta .ai-label { color: #5a1a1a; letter-spacing: 0.14em; font-size: 8px; }
+  .msg-meta .ai-label { color: #1f7f4a; letter-spacing: 0.14em; font-size: 8px; }
 
-  /* USER message — green */
+  /* USER message — red */
   .msg-text {
     font-size: clamp(12px, 1.5vw, 19px);
     line-height: 1.6; word-break: break-word; white-space: pre-wrap;
-    padding-left: 14px; border-left: 1px solid #1f7f4a;
-    color: #43d27c;
+    padding-left: 14px; border-left: 1px solid #7f1f1f;
+    color: #e05555;
   }
 
-  /* AI reply — red */
+  /* AI reply — green */
   .msg-text.ai {
-    color: #e05555;
-    border-left-color: #7f1f1f;
+    color: #43d27c;
+    border-left-color: #1f7f4a;
   }
 
   /* thinking indicator */
   .thinking {
     display: flex; align-items: center; gap: 6px;
-    padding-left: 14px; border-left: 1px solid #7f1f1f;
+    padding-left: 14px; border-left: 1px solid #1f7f4a;
   }
   .think-dot {
-    width: 5px; height: 5px; border-radius: 50%; background: #5a1a1a;
+    width: 5px; height: 5px; border-radius: 50%; background: #2c9d5d;
     animation: tpulse 1.2s ease-in-out infinite;
   }
   .think-dot:nth-child(2) { animation-delay: 0.2s; }
@@ -104,7 +104,7 @@
 
   .cursor {
     display: inline-block; width: 0.5em; height: 1em;
-    background: #e05555; vertical-align: text-bottom;
+    background: #43d27c; vertical-align: text-bottom;
     animation: blink 1s step-end infinite; margin-left: 2px;
   }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
@@ -168,8 +168,8 @@
 
     <div class="term-footer">
       <div class="footer-legend">
-        <div class="legend-item"><div class="legend-dot green"></div><span class="legend-label">user</span></div>
-        <div class="legend-item"><div class="legend-dot red"></div><span class="legend-label">ai</span></div>
+        <div class="legend-item"><div class="legend-dot red"></div><span class="legend-label">user</span></div>
+        <div class="legend-item"><div class="legend-dot green"></div><span class="legend-label">ai</span></div>
       </div>
       <span class="footer-stat">msgs <span id="msg-count">0</span></span>
     </div>
@@ -288,7 +288,7 @@
     thinkBlock.className = 'msg-block';
     const thinkMeta = document.createElement('div');
     thinkMeta.className = 'msg-meta';
-    thinkMeta.innerHTML = `<span class="ai-label">gpt-4o-mini</span>`;
+    thinkMeta.innerHTML = `<span class="ai-label">greenroom</span>`;
     const thinkEl = document.createElement('div');
     thinkEl.className = 'thinking';
     thinkEl.innerHTML = `<div class="think-dot"></div><div class="think-dot"></div><div class="think-dot"></div>`;
@@ -352,7 +352,7 @@
     block.className = 'msg-block';
     const meta = document.createElement('div');
     meta.className = 'msg-meta';
-    meta.innerHTML = `<span class="ai-label">gpt-4o-mini</span><span class="sep">/</span><span class="time" data-ts="${data.ts}">${formatTime(Math.floor((Date.now()-data.ts)/1000))}</span>`;
+    meta.innerHTML = `<span class="ai-label">greenroom</span><span class="sep">/</span><span class="time" data-ts="${data.ts}">${formatTime(Math.floor((Date.now()-data.ts)/1000))}</span>`;
     const textEl = document.createElement('div');
     textEl.className = 'msg-text ai';
     textEl.textContent = text;
