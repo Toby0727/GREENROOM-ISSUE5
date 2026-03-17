@@ -754,6 +754,34 @@ async function rebuildDatabaseFromSources(sources) {
   return results;
 }
 
+// Auto-summary: ask GPT to produce a single comprehensive overview of the whole
+// document, capturing all themes, historical references, and arguments. This chunk
+// is added to the index so abstract queries ("what historical references") can match
+// even when no individual content chunk contains the right surface-level tokens.
+async function summarizeDoc(title, content) {
+  if (!canUseOpenAi()) return null;
+  try {
+    const data = await openAiJson('/chat/completions', {
+      model: CHAT_MODEL,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Analyze this document thoroughly. Write a comprehensive summary covering every ' +
+            'theme, argument, historical reference, key figure, event, and example it contains. ' +
+            'Be specific — include names, dates, and concrete details. Do not omit anything.'
+        },
+        { role: 'user', content: `Title: ${title}\n\n${content}` }
+      ],
+      max_tokens: 450,
+      temperature: 0.2
+    });
+    return data?.choices?.[0]?.message?.content?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function uploadDocument({ title, content, sourcePath = null }) {
   const cleanTitle = String(title || '').trim() || `doc-${Date.now()}`;
   const cleanContent = String(content || '').trim();
@@ -788,6 +816,25 @@ export async function uploadDocument({ title, content, sourcePath = null }) {
     embedding: embeddings[index],
     createdAt: Date.now()
   }));
+
+  // Add an auto-generated summary chunk so abstract queries can find this document
+  try {
+    const summary = await summarizeDoc(cleanTitle, cleanContent);
+    if (summary) {
+      const [summEmbed] = await embedTexts([summary]);
+      chunkRecords.push({
+        id: `${documentId}_chunk_summary`,
+        documentId,
+        title: cleanTitle,
+        text: `[AUTO-SUMMARY] ${summary}`,
+        embedding: summEmbed,
+        createdAt: Date.now(),
+        isSummary: true
+      });
+    }
+  } catch {
+    // Summary is best-effort; index proceeds without it
+  }
 
   db.documents.push({
     id: documentId,
@@ -869,6 +916,34 @@ export async function listDocuments() {
   return db.documents;
 }
 
+// HyDE (Hypothetical Document Embeddings): generate a plausible answer to the
+// question, then embed *that* instead of the raw question. Because the hypothetical
+// answer uses the same vocabulary as the document (e.g. "Hammurabi", "Ying Zheng")
+// it retrieves far more relevant chunks for abstract / conceptual queries.
+async function generateHypotheticalAnswer(question) {
+  if (!canUseOpenAi()) return null;
+  try {
+    const data = await openAiJson('/chat/completions', {
+      model: CHAT_MODEL,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Write a short, detailed, plausible answer to the following question as if you were ' +
+            'an expert. Include specific names, events, and examples. ' +
+            'This text is used only for document retrieval — it will never be shown to the user.'
+        },
+        { role: 'user', content: question }
+      ],
+      max_tokens: 120,
+      temperature: 0.7
+    });
+    return data?.choices?.[0]?.message?.content?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function answerWithRag({ message, history = [], sessionId = 'default' }) {
   await ensureWorkspaceDocumentsIndexed();
 
@@ -896,7 +971,9 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
     const vectorChunks = db.chunks.filter(chunk => Array.isArray(chunk.embedding));
     if (vectorChunks.length > 0) {
       try {
-        const [questionEmbedding] = await embedTexts([message]);
+        // HyDE: embed a hypothetical answer rather than the raw question for better recall
+        const hydeText = await generateHypotheticalAnswer(message);
+        const [questionEmbedding] = await embedTexts([hydeText || message]);
         const scored = vectorChunks
           .map(chunk => ({
             ...chunk,
@@ -937,7 +1014,10 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
 
   contextChunks = filterChunksByMentionedTitle(message, contextChunks);
   contextChunks = expandContextForProfileQuestion(message, contextChunks, db.chunks);
-  if (contextChunks.length > 0 && !isRelevantContext(message, contextChunks)) {
+  // Trust strong vector matches unconditionally — HyDE retrieval for abstract queries
+  // returns high-scoring chunks that won't pass lexical isRelevantContext checks.
+  const maxVecScore = contextChunks.reduce((m, c) => Math.max(m, Number(c.score) || 0), 0);
+  if (contextChunks.length > 0 && maxVecScore < 0.35 && !isRelevantContext(message, contextChunks)) {
     contextChunks = [];
     conversation.lastContextChunkIds = [];
   }
