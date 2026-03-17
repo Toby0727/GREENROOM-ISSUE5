@@ -38,14 +38,26 @@
     if (document.getElementById('wl-styles')) return;
     const s = document.createElement('style');
     s.id = 'wl-styles';
+    // Uses --wl-c custom property (set inline per mark) for reliable animation.
+    // currentColor in @keyframes text-shadow is not consistently interpolated
+    // across browsers — CSS custom properties are.
     s.textContent = `
 @keyframes wl-pulse {
-  0%,100% { text-shadow: 0 0 4px currentColor, 0 0 10px currentColor; opacity: 0.72; }
-  50%      { text-shadow: 0 0 8px currentColor, 0 0 24px currentColor, 0 0 48px currentColor; opacity: 1; }
+  0%,100% {
+    text-shadow: 0 0 6px var(--wl-c), 0 0 14px var(--wl-c);
+    filter: drop-shadow(0 0 3px var(--wl-c));
+    opacity: 0.65;
+  }
+  50% {
+    text-shadow: 0 0 10px var(--wl-c), 0 0 30px var(--wl-c), 0 0 60px var(--wl-c);
+    filter: drop-shadow(0 0 8px var(--wl-c)) drop-shadow(0 0 16px var(--wl-c));
+    opacity: 1;
+  }
 }
 mark[data-wl-word] {
-  background: transparent;
-  border-bottom: 1.5px solid currentColor;
+  background: transparent !important;
+  color: var(--wl-c) !important;
+  border-bottom: 1.5px solid var(--wl-c);
   padding-bottom: 1px;
   border-radius: 1px;
   animation: wl-pulse ${PULSE_DUR_S}s ease-in-out infinite;
@@ -88,10 +100,13 @@ mark[data-wl-word] {
     while ((m = re.exec(text)) !== null) {
       if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
       const w    = m[1].toLowerCase();
+      const c    = getColor(w);
       const mark = document.createElement('mark');
       mark.dataset.wlWord = w;
-      mark.style.color    = getColor(w);  // drives currentColor in the CSS keyframes
-      mark.textContent    = m[1];
+      // Set --wl-c custom property so the @keyframes animation can reference it reliably
+      mark.style.setProperty('--wl-c', c);
+      mark.style.color = c;
+      mark.textContent = m[1];
       frag.appendChild(mark);
       last = re.lastIndex;
     }

@@ -741,15 +741,14 @@ async function rebuildDatabaseFromSources(sources) {
   db.chunks = [];
   db.conversations = {};
 
-  const results = [];
-  for (const source of sources) {
-    const result = await uploadDocument({
+  // Index all documents in parallel — previously sequential, causing long cold starts
+  const results = await Promise.all(
+    sources.map(source => uploadDocument({
       title: source.title,
       content: source.content,
       sourcePath: source.sourcePath
-    });
-    results.push(result);
-  }
+    }))
+  );
 
   return results;
 }
@@ -795,18 +794,39 @@ export async function uploadDocument({ title, content, sourcePath = null }) {
     throw new Error('Could not create chunks from document content');
   }
 
-  let embeddings;
-  let embeddingProvider = 'local';
-
-  try {
-    embeddings = await embedTexts(chunks);
-    embeddingProvider = canUseOpenAi() ? 'openai' : 'local';
-  } catch {
-    embeddings = chunks.map(text => buildLocalEmbedding(text));
-    embeddingProvider = 'local';
-  }
   const db = getDb();
   const documentId = `doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+  // Run chunk embedding and doc summarisation in parallel
+  let embeddings;
+  let embeddingProvider = 'local';
+  let summaryEntry = null;
+
+  const [embeddingResult, summaryResult] = await Promise.allSettled([
+    // 1) embed all content chunks
+    (async () => {
+      const embs = await embedTexts(chunks);
+      return { embs, provider: canUseOpenAi() ? 'openai' : 'local' };
+    })(),
+    // 2) generate + embed summary (best-effort)
+    (async () => {
+      const summary = await summarizeDoc(cleanTitle, cleanContent);
+      if (!summary) return null;
+      const [summEmbed] = await embedTexts([summary]);
+      return { summary, summEmbed };
+    })()
+  ]);
+
+  if (embeddingResult.status === 'fulfilled') {
+    embeddings = embeddingResult.value.embs;
+    embeddingProvider = embeddingResult.value.provider;
+  } else {
+    embeddings = chunks.map(text => buildLocalEmbedding(text));
+  }
+
+  if (summaryResult.status === 'fulfilled' && summaryResult.value) {
+    summaryEntry = summaryResult.value;
+  }
 
   const chunkRecords = chunks.map((text, index) => ({
     id: `${documentId}_chunk_${index + 1}`,
@@ -817,23 +837,16 @@ export async function uploadDocument({ title, content, sourcePath = null }) {
     createdAt: Date.now()
   }));
 
-  // Add an auto-generated summary chunk so abstract queries can find this document
-  try {
-    const summary = await summarizeDoc(cleanTitle, cleanContent);
-    if (summary) {
-      const [summEmbed] = await embedTexts([summary]);
-      chunkRecords.push({
-        id: `${documentId}_chunk_summary`,
-        documentId,
-        title: cleanTitle,
-        text: `[AUTO-SUMMARY] ${summary}`,
-        embedding: summEmbed,
-        createdAt: Date.now(),
-        isSummary: true
-      });
-    }
-  } catch {
-    // Summary is best-effort; index proceeds without it
+  if (summaryEntry) {
+    chunkRecords.push({
+      id: `${documentId}_chunk_summary`,
+      documentId,
+      title: cleanTitle,
+      text: `[AUTO-SUMMARY] ${summaryEntry.summary}`,
+      embedding: summaryEntry.summEmbed,
+      createdAt: Date.now(),
+      isSummary: true
+    });
   }
 
   db.documents.push({
@@ -984,9 +997,15 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
     const vectorChunks = db.chunks.filter(chunk => Array.isArray(chunk.embedding));
     if (vectorChunks.length > 0) {
       try {
-        // HyDE: embed a hypothetical answer rather than the raw question for better recall
-        const hydeText = await generateHypotheticalAnswer(message);
-        const [questionEmbedding] = await embedTexts([hydeText || message]);
+        // HyDE + direct embedding run in parallel; use whichever finishes best
+        const [hydeText, [directEmbedding]] = await Promise.all([
+          generateHypotheticalAnswer(message).catch(() => null),
+          embedTexts([message])
+        ]);
+        const embedInput = hydeText || message;
+        const [questionEmbedding] = hydeText
+          ? await embedTexts([embedInput])
+          : [directEmbedding];
         const scored = vectorChunks
           .map(chunk => ({
             ...chunk,
