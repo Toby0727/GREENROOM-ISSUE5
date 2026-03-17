@@ -54,30 +54,30 @@
     <input type="file" id="file-input" accept="video/*">
     <div class="upload-zone" id="upload-zone">
       <div class="upload-cross"></div>
-      <span class="upload-label">点击上传视频</span>
+      <span class="upload-label">Click to upload video</span>
     </div>
     <video id="video-el" autoplay loop muted playsinline></video>
   </div>
   <div class="doc-panel">
     <div class="doc-top">
       <div class="doc-meta">
-        <div class="doc-title">LIVE DOC</div>
+        <div class="doc-title">TYPE HERE</div>
         <div class="doc-status">
           <div class="dot"></div>
-          <span class="status-label">实时同步中</span>
+          <span class="status-label">Live sync active</span>
         </div>
       </div>
       <div class="qr-wrap">
         <div class="qr-box"><div id="qr-div"></div></div>
-        <div class="qr-label">扫码参与</div>
+        <div class="qr-label">Scan to join</div>
       </div>
     </div>
     <div class="text-scroll" id="text-scroll">
       <div id="live-text"><span class="cursor"></span></div>
     </div>
     <div class="doc-footer">
-      <span class="footer-stat">字数 <span id="char-count">0</span></span>
-      <span class="conn-badge" id="conn-badge">连接中…</span>
+      <span class="footer-stat">Characters <span id="char-count">0</span></span>
+      <span class="conn-badge" id="conn-badge">Connecting...</span>
     </div>
   </div>
 </div>
@@ -104,8 +104,8 @@
   const charCount = document.getElementById('char-count');
   const scroll    = document.getElementById('text-scroll');
 
-  pusher.connection.bind('connected', () => { connBadge.textContent = '已连接'; connBadge.classList.add('connected'); });
-  pusher.connection.bind('disconnected', () => { connBadge.textContent = '已断开'; connBadge.classList.remove('connected'); });
+  pusher.connection.bind('connected', () => { connBadge.textContent = 'Connected'; connBadge.classList.add('connected'); });
+  pusher.connection.bind('disconnected', () => { connBadge.textContent = 'Disconnected'; connBadge.classList.remove('connected'); });
 
   channel.bind('update', data => renderText(data.text || ''));
   channel.bind('clear',  ()   => renderText(''));

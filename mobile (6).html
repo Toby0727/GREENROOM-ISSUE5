@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>参与互动</title>
+<title>Join Interaction</title>
 <script src="/pusher.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Bebas+Neue&display=swap" rel="stylesheet">
 <style>
@@ -46,27 +46,27 @@
 <div class="screen">
   <div class="header">
     <div class="title-block">
-      <div class="title">LIVE DOC</div>
-      <div class="subtitle">扫码互动终端</div>
+      <div class="title">TYPE HERE</div>
+      <div class="subtitle">Scan to join interaction</div>
     </div>
     <div class="conn-pill" id="conn-pill">
       <div class="pill-dot" id="pill-dot"></div>
-      <span class="pill-label" id="pill-label">连接中</span>
+      <span class="pill-label" id="pill-label">Connecting</span>
     </div>
   </div>
   <div class="preview">
-    <div class="preview-label">— 电视上显示的内容</div>
+    <div class="preview-label">— Content shown on TV</div>
     <div id="preview-text"><span class="preview-cursor"></span></div>
   </div>
   <div class="input-area">
     <div class="char-bar">
-      <span class="char-hint">输入内容 · 实时同步到大屏</span>
-      <button class="clear-btn" id="clear-btn">清空</button>
+      <span class="char-hint">Type text · sync to display in real time</span>
+      <button class="clear-btn" id="clear-btn">Clear</button>
     </div>
-    <textarea id="msg-input" placeholder="在这里打字…" rows="2"></textarea>
+    <textarea id="msg-input" placeholder="Type here..." rows="2"></textarea>
     <div class="send-row">
-      <button class="send-btn" id="send-btn" disabled>新行发送</button>
-      <button class="append-btn" id="append-btn">接续</button>
+      <button class="send-btn" id="send-btn" disabled>Send as New Line</button>
+      <button class="append-btn" id="append-btn">Append</button>
     </div>
   </div>
 </div>
@@ -87,18 +87,18 @@
 
   pusher.connection.bind('connected', () => {
     connPill.classList.add('on'); pillDot.classList.add('on');
-    pillLabel.textContent = '已连接'; sendBtn.disabled = false;
-    // 新设备连上后请求当前状态
+    pillLabel.textContent = 'Connected'; sendBtn.disabled = false;
+    // Request current state after a new device connects.
     publish('requestSync', {});
   });
   pusher.connection.bind('disconnected', () => {
     connPill.classList.remove('on'); pillDot.classList.remove('on');
-    pillLabel.textContent = '已断开'; sendBtn.disabled = true;
+    pillLabel.textContent = 'Disconnected'; sendBtn.disabled = true;
   });
 
   channel.bind('update', data => { tvText = data.text || ''; renderPreview(tvText); });
   channel.bind('clear',  ()   => { tvText = ''; renderPreview(''); });
-  // 收到同步请求时，把自己的内容广播出去
+  // Broadcast current content when a sync request is received.
   channel.bind('requestSync', () => {
     if (tvText) publish('update', { text: tvText });
   });
