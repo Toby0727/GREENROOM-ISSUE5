@@ -655,8 +655,7 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
         score: lexicalScore(message, `${chunk.title} ${chunk.text}`)
       }))
       .sort((a, b) => b.score - a.score)
-      .slice(0, 6)
-      .filter(chunk => chunk.score > 0);
+      .slice(0, 6);
 
     contextChunks = lexicalMatches;
     conversation.lastContextChunkIds = lexicalMatches.map(chunk => chunk.id);
