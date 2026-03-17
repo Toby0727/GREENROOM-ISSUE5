@@ -59,11 +59,40 @@
     flex: 1; overflow-y: auto; padding: 16px 20px;
     scrollbar-width: thin; scrollbar-color: #1a1a1a transparent;
     display: flex; flex-direction: column; gap: 16px;
+    position: relative;
   }
   .messages::-webkit-scrollbar { width: 3px; }
   .messages::-webkit-scrollbar-thumb { background: #1e1e1e; }
 
+  /* CRT scanline overlay */
+  .messages::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 10;
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent 0px, transparent 3px,
+      rgba(0,0,0,0.09) 3px, rgba(0,0,0,0.09) 4px
+    );
+  }
+
   .msg-block { display: flex; flex-direction: column; gap: 4px; }
+
+  /* Entry flash for all new message blocks */
+  @keyframes msg-arrive {
+    0%   { opacity: 0; transform: translateX(-6px); }
+    55%  { opacity: 1; transform: translateX(2px); }
+    100% { opacity: 1; transform: translateX(0); }
+  }
+  .msg-block.msg-new { animation: msg-arrive 0.28s cubic-bezier(.2,.8,.4,1) both; }
+
+  /* Red border flare on new user message */
+  @keyframes border-flare-red {
+    0%   { border-left-color: #7f1f1f; box-shadow: none; }
+    25%  { border-left-color: #ff5555; box-shadow: -3px 0 10px #ff333388; }
+    100% { border-left-color: #7f1f1f; box-shadow: none; }
+  }
+  .msg-block.msg-new .msg-text:not(.ai) {
+    animation: border-flare-red 1s ease 0.05s both;
+  }
 
   .msg-meta {
     display: flex; align-items: center; gap: 6px;
@@ -73,7 +102,16 @@
   .msg-meta .sep  { color: #1e1e1e; }
   .msg-meta .device { color: #2a2a2a; }
   .msg-meta .time { color: #222; }
-  .msg-meta .ai-label { color: #1f7f4a; letter-spacing: 0.14em; font-size: 8px; }
+
+  /* AI label breathes between dim and bright */
+  @keyframes label-breathe {
+    0%,100% { color: #1f7f4a; text-shadow: none; }
+    50%     { color: #43d27c; text-shadow: 0 0 8px #43d27c55; }
+  }
+  .msg-meta .ai-label {
+    color: #1f7f4a; letter-spacing: 0.14em; font-size: 8px;
+    animation: label-breathe 4s ease-in-out infinite;
+  }
 
   /* USER message — red */
   .msg-text {
@@ -87,6 +125,20 @@
   .msg-text.ai {
     color: #43d27c;
     border-left-color: #1f7f4a;
+  }
+
+  /* Phosphor glow on fully rendered AI text */
+  @keyframes phosphor-glow {
+    0%,100% { text-shadow: 0 0 3px #43d27c22; }
+    50%     { text-shadow: 0 0 10px #43d27c99, 0 0 2px #43d27ccc; }
+  }
+  @keyframes border-flare-green {
+    0%   { border-left-color: #1f7f4a; box-shadow: none; }
+    20%  { border-left-color: #43ffaa; box-shadow: -3px 0 12px #43ffaa66; }
+    100% { border-left-color: #1f7f4a; box-shadow: none; }
+  }
+  .msg-text.ai.ai-done {
+    animation: phosphor-glow 5s ease-in-out infinite, border-flare-green 1.2s ease both;
   }
 
   /* thinking indicator */
@@ -206,6 +258,13 @@
   let chatHistory = [];
   let timers = {};
 
+  function saveSession() {
+    try {
+      localStorage.setItem('gr_messages', JSON.stringify(allMessages));
+      localStorage.setItem('gr_chatHistory', JSON.stringify(chatHistory));
+    } catch {}
+  }
+
   const fontMap = {
     'mono':      "'IBM Plex Mono', monospace",
     'serif':     "'Times New Roman', Times, serif",
@@ -222,6 +281,8 @@
 
   channel.bind('clear', () => {
     allMessages = []; chatHistory = [];
+    localStorage.removeItem('gr_messages');
+    localStorage.removeItem('gr_chatHistory');
     Object.values(timers).forEach(clearInterval);
     timers = {};
     messages.innerHTML = '';
@@ -252,11 +313,16 @@
     if (!isSynced) {
       allMessages.push(data);
       chatHistory.push({ role: 'user', content: data.text });
+      saveSession();
     }
     emptyState.style.display = 'none';
 
     const block = document.createElement('div');
     block.className = 'msg-block';
+    if (!isSynced) {
+      block.classList.add('msg-new');
+      block.addEventListener('animationend', () => block.classList.remove('msg-new'), { once: true });
+    }
     block.dataset.id = data.id;
 
     const elapsed = isSynced ? Math.floor((Date.now() - data.ts) / 1000) : 0;
@@ -341,11 +407,13 @@
         } else {
           clearInterval(typeInterval);
           replyEl.removeChild(cur);
+          replyEl.classList.add('ai-done');
         }
       }, 18);
 
       const aiRecord = { id: 'ai_' + Date.now(), role: 'ai', text: reply, ts: Date.now() };
       allMessages.push(aiRecord);
+      saveSession();
       updateCount();
 
     } catch (err) {
@@ -386,6 +454,21 @@
   function escHtml(str) {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
+
+  // Restore conversation from localStorage on page load
+  (function restoreSession() {
+    try {
+      const savedMessages = JSON.parse(localStorage.getItem('gr_messages') || '[]');
+      const savedHistory  = JSON.parse(localStorage.getItem('gr_chatHistory') || '[]');
+      if (!Array.isArray(savedMessages) || !savedMessages.length) return;
+      allMessages  = savedMessages;
+      chatHistory  = Array.isArray(savedHistory) ? savedHistory : [];
+      savedMessages.forEach(m => {
+        if (m.role === 'ai') addAIMessage(m.text, m);
+        else addUserMessage(m, true);
+      });
+    } catch {}
+  })();
 </script>
 </body>
 </html>

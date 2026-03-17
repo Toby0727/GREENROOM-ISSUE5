@@ -206,6 +206,13 @@
   let chatHistory = [];
   let timers = {};
 
+  function saveSession() {
+    try {
+      localStorage.setItem('gr_messages', JSON.stringify(allMessages));
+      localStorage.setItem('gr_chatHistory', JSON.stringify(chatHistory));
+    } catch {}
+  }
+
   const fontMap = {
     'mono':      "'IBM Plex Mono', monospace",
     'serif':     "'Times New Roman', Times, serif",
@@ -222,6 +229,8 @@
 
   channel.bind('clear', () => {
     allMessages = []; chatHistory = [];
+    localStorage.removeItem('gr_messages');
+    localStorage.removeItem('gr_chatHistory');
     Object.values(timers).forEach(clearInterval);
     timers = {};
     messages.innerHTML = '';
@@ -252,6 +261,7 @@
     if (!isSynced) {
       allMessages.push(data);
       chatHistory.push({ role: 'user', content: data.text });
+      saveSession();
     }
     emptyState.style.display = 'none';
 
@@ -346,6 +356,7 @@
 
       const aiRecord = { id: 'ai_' + Date.now(), role: 'ai', text: reply, ts: Date.now() };
       allMessages.push(aiRecord);
+      saveSession();
       updateCount();
 
     } catch (err) {
@@ -386,6 +397,21 @@
   function escHtml(str) {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
+
+  // Restore conversation from localStorage on page load
+  (function restoreSession() {
+    try {
+      const savedMessages = JSON.parse(localStorage.getItem('gr_messages') || '[]');
+      const savedHistory  = JSON.parse(localStorage.getItem('gr_chatHistory') || '[]');
+      if (!Array.isArray(savedMessages) || !savedMessages.length) return;
+      allMessages  = savedMessages;
+      chatHistory  = Array.isArray(savedHistory) ? savedHistory : [];
+      savedMessages.forEach(m => {
+        if (m.role === 'ai') addAIMessage(m.text, m);
+        else addUserMessage(m, true);
+      });
+    } catch {}
+  })();
 </script>
 </body>
 </html>
