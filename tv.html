@@ -435,7 +435,12 @@
     meta.innerHTML = `<span class="ai-label">greenroom</span><span class="sep">/</span><span class="time" data-ts="${data.ts}">${formatTime(Math.floor((Date.now()-data.ts)/1000))}</span>`;
     const textEl = document.createElement('div');
     textEl.className = 'msg-text ai ai-done';
+    textEl.textContent = text;
+    block.appendChild(meta);
+    block.appendChild(textEl);
+    messages.appendChild(block);
     messages.scrollTop = messages.scrollHeight;
+    updateCount();
   }
 
   function formatTime(secs) {
