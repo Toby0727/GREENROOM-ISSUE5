@@ -9,6 +9,12 @@ const WORKSPACE_ROOT = process.cwd();
 const WORKSPACE_DOC_DIRS = ['.rag-docs', 'writings', 'knowledge', 'docs'];
 const TEXT_FILE_EXTENSIONS = new Set(['.txt', '.md', '.markdown', '.text']);
 const LOCAL_EMBEDDING_DIMS = 256;
+const WEAK_QUERY_TOKENS = new Set([
+  'who', 'what', 'when', 'where', 'why', 'how', 'which', 'that', 'this', 'those', 'these',
+  'have', 'with', 'from', 'into', 'about', 'there', 'their', 'your', 'ours', 'they', 'them',
+  'does', 'do', 'did', 'are', 'was', 'were', 'will', 'would', 'could', 'should', 'can',
+  'regular', 'normal', 'mode', 'chat', 'please'
+]);
 
 function getSearchRoots() {
   return [WORKSPACE_ROOT];
@@ -246,7 +252,7 @@ function selectBestExcerpt(message, contextChunks) {
 
 function buildLocalAnswer(message, contextChunks) {
   if (!contextChunks.length) {
-    return 'I do not have enough uploaded material yet.';
+    return '';
   }
 
   const bestSentences = selectBestSentences(message, contextChunks);
@@ -275,7 +281,56 @@ function buildLocalAnswer(message, contextChunks) {
     return limitReply(fallbackLines.join(' '));
   }
 
-  return 'I do not have enough uploaded material yet.';
+  return '';
+}
+
+function buildNoContextReply(message) {
+  const q = String(message || '').trim().toLowerCase();
+
+  if (!q) {
+    return 'Please send a question and I can help.';
+  }
+
+  if (/^(hi|hello|hey|yo|sup|hiya|good morning|good afternoon|good evening)\b/.test(q)) {
+    return 'Hi! I can answer from your uploaded docs, and I can also do regular chat when an API key is configured.';
+  }
+
+  if (/regular chat|normal chat|chat mode|non[-\s]?rag/.test(q)) {
+    return 'Yes. Regular chat works when OPENAI_API_KEY is configured; otherwise I can only answer from uploaded documents.';
+  }
+
+  if (/president/.test(q)) {
+    return 'I can answer that in regular chat mode, but I need OPENAI_API_KEY configured. Also tell me which country you mean.';
+  }
+
+  return 'I do not have enough uploaded material for that question yet. Add relevant docs, or configure OPENAI_API_KEY to enable regular chat fallback.';
+}
+
+async function answerWithoutContext({ message, history = [] }) {
+  if (canUseOpenAi()) {
+    try {
+      const completion = await openAiJson('/chat/completions', {
+        model: CHAT_MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are greenroom. There is no retrieved document context for this turn. Continue as a concise general assistant, max 2 sentences.'
+          },
+          ...history.slice(-8),
+          { role: 'user', content: message }
+        ],
+        max_tokens: 180,
+        temperature: 0.3
+      });
+
+      const modelReply = limitReply(completion?.choices?.[0]?.message?.content || '');
+      if (modelReply) return modelReply;
+    } catch {
+      // Fall back to local no-context reply if regular chat call fails.
+    }
+  }
+
+  return buildNoContextReply(message);
 }
 
 function getConversation(sessionId) {
@@ -398,6 +453,33 @@ function filterChunksByMentionedTitle(question, chunks) {
 
   if (!matchedTitles.size) return chunks;
   return chunks.filter(chunk => matchedTitles.has(chunk.title));
+}
+
+function isRelevantContext(question, chunks) {
+  if (!chunks.length) return false;
+
+  const questionTokens = tokenize(question);
+  const strongQuestionTokens = questionTokens.filter(token => token.length >= 5 && !WEAK_QUERY_TOKENS.has(token));
+  if (!strongQuestionTokens.length) return false;
+
+  const mergedTextTokens = new Set(tokenize(chunks.map(chunk => `${chunk.title} ${chunk.text}`).join(' ')));
+  const hasStrongMatch = strongQuestionTokens.some(token => {
+    if (mergedTextTokens.has(token)) return true;
+    for (const textToken of mergedTextTokens) {
+      if (textToken.length < 4) continue;
+      if (textToken.startsWith(token) || token.startsWith(textToken)) return true;
+    }
+    return false;
+  });
+  if (!hasStrongMatch) return false;
+
+  const bestLexical = chunks.reduce((maxScore, chunk) => {
+    const score = lexicalScore(question, `${chunk.title} ${chunk.text}`);
+    return Math.max(maxScore, score);
+  }, 0);
+
+  // Require at least some lexical grounding between question and retrieved text.
+  return bestLexical >= 0.2;
 }
 
 async function pathExists(filePath) {
@@ -709,11 +791,25 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
   }
 
   contextChunks = filterChunksByMentionedTitle(message, contextChunks);
+  if (contextChunks.length > 0 && !isRelevantContext(message, contextChunks)) {
+    contextChunks = [];
+    conversation.lastContextChunkIds = [];
+  }
+
   if (contextChunks.length > 0) {
     conversation.lastContextChunkIds = contextChunks.map(chunk => chunk.id);
   }
 
   conversation.lastUserQuestion = message;
+
+  if (!contextChunks.length) {
+    const reply = await answerWithoutContext({ message, history });
+    return {
+      reply,
+      mode: 'no-context-fallback',
+      citations: []
+    };
+  }
 
   const context = buildContext(contextChunks);
   const promptMessages = [
@@ -729,7 +825,7 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
     { role: 'user', content: message }
   ];
 
-  let reply = buildLocalAnswer(message, contextChunks);
+  let reply = buildLocalAnswer(message, contextChunks) || buildNoContextReply(message);
 
   if (canUseOpenAi()) {
     try {
