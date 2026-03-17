@@ -47,6 +47,29 @@ function cosineSimilarity(a, b) {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
+function tokenize(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .map(token => token.trim())
+    .filter(token => token.length > 2);
+}
+
+function lexicalScore(query, text) {
+  const queryTokens = tokenize(query);
+  const textTokens = new Set(tokenize(text));
+
+  if (!queryTokens.length || !textTokens.size) return 0;
+
+  let matches = 0;
+  for (const token of queryTokens) {
+    if (textTokens.has(token)) matches += 1;
+  }
+
+  return matches / queryTokens.length;
+}
+
 function splitIntoSentences(text) {
   return String(text || '')
     .split(/(?<=[.!?])\s+/)
@@ -265,6 +288,28 @@ async function readWorkspaceDocumentFiles() {
   return sources;
 }
 
+async function listWorkspaceSourceFiles() {
+  const sources = [];
+
+  for (const dirName of WORKSPACE_DOC_DIRS) {
+    const absDir = path.join(WORKSPACE_ROOT, dirName);
+    if (!await pathExists(absDir)) continue;
+
+    const files = await walkDirectory(absDir);
+    for (const filePath of files) {
+      const stats = await fs.stat(filePath);
+      const relativePath = path.relative(WORKSPACE_ROOT, filePath);
+      sources.push({
+        title: path.basename(filePath),
+        sourcePath: relativePath,
+        size: stats.size
+      });
+    }
+  }
+
+  return sources;
+}
+
 async function getWorkspaceSignature() {
   const parts = [];
 
@@ -366,6 +411,14 @@ export async function syncWorkspaceDocuments() {
   };
 }
 
+export async function inspectWorkspaceState() {
+  const sourceFiles = await listWorkspaceSourceFiles();
+  return {
+    apiKeyPresent: Boolean(process.env.OPENAI_API_KEY),
+    sourceFiles
+  };
+}
+
 export async function ensureWorkspaceDocumentsIndexed() {
   const db = getDb();
   const signature = await getWorkspaceSignature();
@@ -424,6 +477,20 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
 
     contextChunks = scored;
     conversation.lastContextChunkIds = scored.map(c => c.id);
+  }
+
+  if (!contextChunks.length && db.chunks.length > 0) {
+    const lexicalMatches = db.chunks
+      .map(chunk => ({
+        ...chunk,
+        score: lexicalScore(message, `${chunk.title} ${chunk.text}`)
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6)
+      .filter(chunk => chunk.score > 0);
+
+    contextChunks = lexicalMatches;
+    conversation.lastContextChunkIds = lexicalMatches.map(chunk => chunk.id);
   }
 
   conversation.lastUserQuestion = message;

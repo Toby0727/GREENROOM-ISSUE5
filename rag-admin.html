@@ -100,11 +100,20 @@
       </div>
       <div class="hint">Then open <a href="/tv.html">tv.html</a> and ask questions from your indexed writing.</div>
     </div>
+
+    <div class="panel">
+      <h1>Workspace Source Files</h1>
+      <div class="hint">These files were detected in Codespaces source folders. If they appear here but not in Indexed Documents, indexing is failing, usually because the API key is missing.</div>
+      <div class="row">
+        <div id="workspace" class="docs"></div>
+      </div>
+    </div>
   </div>
 
   <script>
     const statusEl = document.getElementById('status');
     const docsEl = document.getElementById('docs');
+    const workspaceEl = document.getElementById('workspace');
 
     document.getElementById('sync').addEventListener('click', async () => {
       setStatus('Scanning workspace folders and indexing files...', '');
@@ -114,9 +123,11 @@
         if (!res.ok) throw new Error(data.error || 'Sync failed');
 
         setStatus(`Indexed ${data.indexedCount} workspace document(s).`, 'ok');
+        renderWorkspace(data.workspace);
         await refreshDocs();
       } catch (err) {
         setStatus(err.message, 'err');
+        await refreshDocs();
       }
     });
 
@@ -133,6 +144,11 @@
         const res = await fetch('/api/rag-docs');
         const data = await res.json();
         const docs = data.documents || [];
+        renderWorkspace(data.workspace, data.error);
+
+        if (data.error) {
+          setStatus(data.error, 'err');
+        }
 
         if (!docs.length) {
           docsEl.innerHTML = '<div class="doc">No documents indexed yet.</div>';
@@ -147,7 +163,32 @@
         });
       } catch {
         docsEl.innerHTML = '<div class="doc">Could not load documents.</div>';
+        workspaceEl.innerHTML = '<div class="doc">Could not inspect workspace files.</div>';
       }
+    }
+
+    function renderWorkspace(workspace, errorText) {
+      const sourceFiles = workspace?.sourceFiles || [];
+      const apiKeyPresent = workspace?.apiKeyPresent;
+
+      if (!sourceFiles.length) {
+        workspaceEl.innerHTML = '<div class="doc">No workspace source files found.</div>';
+        return;
+      }
+
+      workspaceEl.innerHTML = '';
+
+      const summary = document.createElement('div');
+      summary.className = 'doc';
+      summary.innerHTML = `<strong>API Key Present: ${apiKeyPresent ? 'yes' : 'no'}</strong>${errorText ? `<span>${errorText}</span>` : ''}`;
+      workspaceEl.appendChild(summary);
+
+      sourceFiles.forEach(file => {
+        const div = document.createElement('div');
+        div.className = 'doc';
+        div.innerHTML = `<strong>${file.title}</strong><span>Path: ${file.sourcePath}</span><span>Bytes: ${file.size}</span>`;
+        workspaceEl.appendChild(div);
+      });
     }
 
     refreshDocs();

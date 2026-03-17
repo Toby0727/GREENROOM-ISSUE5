@@ -1,4 +1,4 @@
-import { syncWorkspaceDocuments } from './_rag.js';
+import { inspectWorkspaceState, syncWorkspaceDocuments } from './_rag.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -10,8 +10,10 @@ export default async function handler(req, res) {
 
   try {
     const result = await syncWorkspaceDocuments();
-    res.status(200).json({ ok: true, ...result });
+    const workspace = await inspectWorkspaceState();
+    res.status(200).json({ ok: true, ...result, workspace });
   } catch (err) {
-    res.status(400).json({ error: err.message || 'Workspace sync failed' });
+    const workspace = await inspectWorkspaceState();
+    res.status(400).json({ error: err.message || 'Workspace sync failed', workspace });
   }
 }
