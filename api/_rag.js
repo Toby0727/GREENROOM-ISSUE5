@@ -7,7 +7,6 @@ const EMBEDDING_MODEL = 'text-embedding-3-small';
 const DB_KEY = '__greenroom_rag_db__';
 const WORKSPACE_ROOT = process.cwd();
 const WORKSPACE_DOC_DIRS = ['.rag-docs', 'writings', 'knowledge', 'docs'];
-const PRELOAD_DOC_CANDIDATES = ['.rag-docs/green room.txt'];
 const TEXT_FILE_EXTENSIONS = new Set(['.txt', '.md', '.markdown', '.text']);
 const LOCAL_EMBEDDING_DIMS = 256;
 
@@ -431,33 +430,6 @@ async function getWorkspaceSignature() {
   return parts.sort().join('|');
 }
 
-async function resolvePreloadSources() {
-  const sources = [];
-  const seenPaths = new Set();
-  const searchRoots = getSearchRoots();
-
-  for (const root of searchRoots) {
-    for (const relPath of PRELOAD_DOC_CANDIDATES) {
-      const absPath = path.join(root, relPath);
-      if (!await pathExists(absPath)) continue;
-      const canonicalPath = path.resolve(absPath);
-      if (seenPaths.has(canonicalPath)) continue;
-      seenPaths.add(canonicalPath);
-
-      const content = await fs.readFile(absPath, 'utf8');
-      if (!String(content).trim()) continue;
-
-      sources.push({
-        title: path.basename(absPath),
-        content,
-        sourcePath: relPath
-      });
-    }
-  }
-
-  return sources;
-}
-
 async function rebuildDatabaseFromSources(sources) {
   const db = getDb();
   db.documents = [];
@@ -567,21 +539,6 @@ export async function inspectWorkspaceState() {
 
 export async function ensureWorkspaceDocumentsIndexed() {
   const db = getDb();
-
-  const preloadSources = await resolvePreloadSources();
-  if (preloadSources.length > 0) {
-    const preloadSignature = preloadSources
-      .map(source => `${source.sourcePath}:${source.content.length}`)
-      .sort()
-      .join('|');
-
-    if (db.workspaceSignature !== preloadSignature || db.documents.length === 0) {
-      await rebuildDatabaseFromSources(preloadSources);
-      db.workspaceSignature = preloadSignature;
-    }
-
-    return db.documents;
-  }
 
   const signature = await getWorkspaceSignature();
 
