@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LIVE DISPLAY</title>
-<script src="https://cdn.jsdelivr.net/npm/ably@2/ably.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/ably@1.2.50/ably.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Bebas+Neue&display=swap" rel="stylesheet">
 <style>
@@ -298,7 +298,7 @@
 
   // ── ABLY REALTIME ──
   const ABLY_KEY = '7QGBGw.Vz9tfw:4309G68-vx0dcWNUgJI2Vqi4qaAp-4Gpb2f2ULRMb4o';
-  const ably = new Ably.Realtime({ key: ABLY_KEY });
+  const ably = new Ably.Realtime.Promise({ key: ABLY_KEY });
   const channel = ably.channels.get('livedoc');
 
   const liveText  = document.getElementById('live-text');
