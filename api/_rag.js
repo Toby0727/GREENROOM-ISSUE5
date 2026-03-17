@@ -140,6 +140,10 @@ async function embedTexts(texts) {
   return data.data.map(d => d.embedding);
 }
 
+function canUseOpenAi() {
+  return Boolean(process.env.OPENAI_API_KEY);
+}
+
 function getConversation(sessionId) {
   const db = getDb();
   if (!db.conversations[sessionId]) {
@@ -360,7 +364,9 @@ export async function uploadDocument({ title, content, sourcePath = null }) {
     throw new Error('Could not create chunks from document content');
   }
 
-  const embeddings = await embedTexts(chunks);
+  const embeddings = canUseOpenAi()
+    ? await embedTexts(chunks)
+    : chunks.map(() => null);
   const db = getDb();
   const documentId = `doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -378,7 +384,8 @@ export async function uploadDocument({ title, content, sourcePath = null }) {
     title: cleanTitle,
     sourcePath,
     createdAt: Date.now(),
-    chunkCount: chunkRecords.length
+    chunkCount: chunkRecords.length,
+    embeddingBacked: canUseOpenAi()
   });
   db.chunks.push(...chunkRecords);
 
@@ -386,7 +393,8 @@ export async function uploadDocument({ title, content, sourcePath = null }) {
     documentId,
     title: cleanTitle,
     sourcePath,
-    chunkCount: chunkRecords.length
+    chunkCount: chunkRecords.length,
+    embeddingBacked: canUseOpenAi()
   };
 }
 
@@ -406,7 +414,8 @@ export async function syncWorkspaceDocuments() {
     documents: results.map(doc => ({
       title: doc.title,
       sourcePath: doc.sourcePath,
-      chunkCount: doc.chunkCount
+      chunkCount: doc.chunkCount,
+      embeddingBacked: doc.embeddingBacked
     }))
   };
 }
@@ -465,18 +474,21 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
   }
 
   if (!contextChunks.length) {
-    const [questionEmbedding] = await embedTexts([message]);
-    const scored = db.chunks
-      .map(chunk => ({
-        ...chunk,
-        score: cosineSimilarity(questionEmbedding, chunk.embedding)
-      }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 6)
-      .filter(c => c.score > 0.15);
+    const vectorChunks = db.chunks.filter(chunk => Array.isArray(chunk.embedding));
+    if (vectorChunks.length > 0 && canUseOpenAi()) {
+      const [questionEmbedding] = await embedTexts([message]);
+      const scored = vectorChunks
+        .map(chunk => ({
+          ...chunk,
+          score: cosineSimilarity(questionEmbedding, chunk.embedding)
+        }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 6)
+        .filter(c => c.score > 0.15);
 
-    contextChunks = scored;
-    conversation.lastContextChunkIds = scored.map(c => c.id);
+      contextChunks = scored;
+      conversation.lastContextChunkIds = scored.map(c => c.id);
+    }
   }
 
   if (!contextChunks.length && db.chunks.length > 0) {
