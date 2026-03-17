@@ -14,7 +14,8 @@ function getDb() {
     globalThis[DB_KEY] = {
       documents: [],
       chunks: [],
-      conversations: {}
+      conversations: {},
+      workspaceSignature: null
     };
   }
   return globalThis[DB_KEY];
@@ -264,6 +265,24 @@ async function readWorkspaceDocumentFiles() {
   return sources;
 }
 
+async function getWorkspaceSignature() {
+  const parts = [];
+
+  for (const dirName of WORKSPACE_DOC_DIRS) {
+    const absDir = path.join(WORKSPACE_ROOT, dirName);
+    if (!await pathExists(absDir)) continue;
+
+    const files = await walkDirectory(absDir);
+    for (const filePath of files) {
+      const stats = await fs.stat(filePath);
+      const relativePath = path.relative(WORKSPACE_ROOT, filePath);
+      parts.push(`${relativePath}:${stats.size}:${stats.mtimeMs}`);
+    }
+  }
+
+  return parts.sort().join('|');
+}
+
 async function rebuildDatabaseFromSources(sources) {
   const db = getDb();
   db.documents = [];
@@ -327,12 +346,16 @@ export async function uploadDocument({ title, content, sourcePath = null }) {
 }
 
 export async function syncWorkspaceDocuments() {
-  const sources = await readWorkspaceDocumentFiles();
-  if (!sources.length) {
+  const signature = await getWorkspaceSignature();
+  if (!signature) {
     throw new Error('No workspace documents found. Add .txt or .md files under .rag-docs/, writings/, knowledge/, or docs/.');
   }
 
+  const sources = await readWorkspaceDocumentFiles();
   const results = await rebuildDatabaseFromSources(sources);
+  const db = getDb();
+  db.workspaceSignature = signature;
+
   return {
     indexedCount: results.length,
     documents: results.map(doc => ({
@@ -343,12 +366,35 @@ export async function syncWorkspaceDocuments() {
   };
 }
 
-export function listDocuments() {
+export async function ensureWorkspaceDocumentsIndexed() {
+  const db = getDb();
+  const signature = await getWorkspaceSignature();
+
+  if (!signature) {
+    db.documents = [];
+    db.chunks = [];
+    db.conversations = {};
+    db.workspaceSignature = null;
+    return [];
+  }
+
+  if (db.workspaceSignature === signature && db.documents.length > 0 && db.chunks.length > 0) {
+    return db.documents;
+  }
+
+  await syncWorkspaceDocuments();
+  return db.documents;
+}
+
+export async function listDocuments() {
+  await ensureWorkspaceDocumentsIndexed();
   const db = getDb();
   return db.documents;
 }
 
 export async function answerWithRag({ message, history = [], sessionId = 'default' }) {
+  await ensureWorkspaceDocumentsIndexed();
+
   const db = getDb();
   const conversation = getConversation(sessionId);
   const hasPreviousContext = conversation.lastContextChunkIds.length > 0;
