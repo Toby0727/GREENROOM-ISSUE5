@@ -548,6 +548,40 @@ function getTitleMatchedChunks(question, chunks) {
   });
 }
 
+// When the user sends a bare name or very short phrase matching a doc title,
+// expand it into a real question so the language model understands the intent.
+function expandQueryForPrompt(message, contextChunks) {
+  const q = String(message || '').trim();
+  const words = q.split(/\s+/).filter(Boolean);
+  if (words.length > 3) return null; // only expand short queries
+
+  const qTokens = tokenize(q);
+  if (!qTokens.length) return null;
+
+  const matchedChunk = contextChunks.find(chunk => {
+    const titleBase = String(chunk.title || '').replace(/\.[^.]+$/, '');
+    const titleTokens = tokenize(titleBase);
+    return titleTokens.some(t => qTokens.includes(t));
+  });
+  if (!matchedChunk) return null;
+
+  // Build a natural expansion using available metadata
+  const merged = contextChunks.map(c => c.text).join('\n');
+  const author  = extractMetadataField(merged, 'author');
+  const title   = extractMetadataField(merged, 'title');
+
+  if (author && title) {
+    return `Who is ${author} and what is their work "${title}" about?`;
+  }
+  if (author) {
+    return `Who is ${author} and what did they write?`;
+  }
+  if (title) {
+    return `What is "${title}" about?`;
+  }
+  return `Tell me about ${q}.`;
+}
+
 function isRelevantContext(question, chunks) {
   if (!chunks.length) return false;
 
@@ -932,6 +966,11 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
   }
 
   const context = buildContext(contextChunks);
+
+  // If the user sent just a name / very short phrase that matches a doc title,
+  // expand it into a real question so the model understands intent.
+  const promptQuestion = expandQueryForPrompt(message, contextChunks) || message;
+
   const promptMessages = [
     {
       role: 'system',
@@ -942,10 +981,10 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
       content: `Retrieved context:\n${context}`
     },
     ...history.slice(-6),
-    { role: 'user', content: message }
+    { role: 'user', content: promptQuestion }
   ];
 
-  let reply = buildLocalAnswer(message, contextChunks);
+  let reply = buildLocalAnswer(promptQuestion, contextChunks);
   if (!reply) {
     reply = limitReply(contextChunks.map(chunk => chunk.text).join(' '));
   }
