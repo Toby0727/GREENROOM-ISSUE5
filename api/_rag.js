@@ -314,6 +314,12 @@ function buildContext(chunks) {
     .join('\n\n');
 }
 
+function contextMatchesQuestion(question, chunks, minScore = 0.2) {
+  if (!chunks.length) return false;
+  const merged = chunks.map(chunk => `${chunk.title} ${chunk.text}`).join(' ');
+  return lexicalScore(question, merged) >= minScore;
+}
+
 async function pathExists(filePath) {
   try {
     await fs.access(filePath);
@@ -581,6 +587,10 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
 
   if (mode === 'reuse-context') {
     contextChunks = db.chunks.filter(c => conversation.lastContextChunkIds.includes(c.id));
+    if (!contextMatchesQuestion(message, contextChunks)) {
+      contextChunks = [];
+      conversation.lastContextChunkIds = [];
+    }
   }
 
   if (!contextChunks.length) {

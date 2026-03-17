@@ -1,5 +1,14 @@
 Ezio:
 
+DOCUMENT METADATA
+
+title: Concrete Disney: The Obscene Avant-Garde
+author: Ezio Yitang Zhang
+date: 2026-02-21
+type: architectural theory essay
+keywords: disneyization, avant-garde, tectonics, commodification, semiotics, brutalism, capital, materiality, architecture critique
+author_interests: dadrock, thrash metal, experimental fashion, architectural theory
+
 SECTION 1
 
 Luna Park is the first manifestation of a curse that is to haunt the architectural profession for the rest of its life, the formula: technology + cardboard (or any other flimsy material) = reality.1
