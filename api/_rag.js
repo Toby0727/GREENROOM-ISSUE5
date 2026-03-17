@@ -968,6 +968,19 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
   }
 
   if (!contextChunks.length) {
+    // For very short queries (bare names / single words), check title-match first.
+    // HyDE generates a generic hypothetical for unknown names and retrieves garbage.
+    const msgTokens = tokenize(message);
+    if (msgTokens.length <= 2) {
+      const titleFirst = getTitleMatchedChunks(message, db.chunks).slice(0, 8);
+      if (titleFirst.length) {
+        contextChunks = titleFirst;
+        conversation.lastContextChunkIds = titleFirst.map(c => c.id);
+      }
+    }
+  }
+
+  if (!contextChunks.length) {
     const vectorChunks = db.chunks.filter(chunk => Array.isArray(chunk.embedding));
     if (vectorChunks.length > 0) {
       try {
@@ -981,7 +994,7 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
           }))
           .sort((a, b) => b.score - a.score)
           .slice(0, 6)
-          .filter(c => c.score > 0.15);
+          .filter(c => c.score > 0.05);
 
         contextChunks = scored;
         conversation.lastContextChunkIds = scored.map(c => c.id);

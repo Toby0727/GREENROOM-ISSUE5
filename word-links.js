@@ -305,18 +305,20 @@
     ].join(';');
     container.appendChild(svg);
 
-    let busy = false, rafId = null;
+    // Guard: when update() mutates the DOM (highlightEl), MutationObserver fires
+    // schedule() again. Use `updating` to suppress re-entry during our own DOM
+    // changes, and a short debounce so rapid class-changes (e.g. ai-done) coalesce.
+    let updateTimer = null;
+    let updating = false;
+
     function schedule() {
-      if (busy) return;
-      if (rafId) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        busy = true;
+      if (updating) return;  // DOM mutations from our own update — ignore
+      clearTimeout(updateTimer);
+      updateTimer = setTimeout(() => {
+        updating = true;
         try { update(container, svg); } catch (e) { console.error('[word-links]', e); }
-        // Keep busy=true until AFTER MutationObserver microtasks fire (MO callbacks
-        // are queued before this Promise.then), preventing the highlight DOM mutations
-        // from triggering an infinite re-draw loop.
-        Promise.resolve().then(() => { busy = false; });
-      });
+        updating = false;
+      }, 60);
     }
 
     new MutationObserver(schedule).observe(container, {
