@@ -203,6 +203,11 @@ function selectBestSentences(message, contextChunks) {
 
   contextChunks.forEach(chunk => {
     splitIntoSentences(chunk.text).forEach(sentence => {
+      const cleanSentence = String(sentence || '').trim();
+      if (!cleanSentence) return;
+      if (cleanSentence.length < 25) return;
+      if (/^[a-z]+:\s*$/i.test(cleanSentence)) return;
+
       const score = lexicalScore(message, sentence);
       if (score > 0) {
         candidates.push({ sentence, score });
@@ -250,9 +255,51 @@ function selectBestExcerpt(message, contextChunks) {
   return candidates[0].text;
 }
 
+function extractMetadataField(text, fieldName) {
+  const pattern = new RegExp(`${fieldName}:\\s*([^\\n]+?)(?=\\s+[a-z_]+:\\s|$)`, 'i');
+  const match = String(text || '').match(pattern);
+  return match ? match[1].trim() : '';
+}
+
+function buildMetadataAnswer(message, contextChunks) {
+  const q = String(message || '').toLowerCase();
+  const merged = contextChunks.map(chunk => chunk.text).join('\n');
+
+  const title = extractMetadataField(merged, 'title');
+  const author = extractMetadataField(merged, 'author');
+  const keywords = extractMetadataField(merged, 'keywords');
+
+  if (q.includes('who is') && author) {
+    if (title) return `${author} is the author of "${title}".`;
+    return `${author} is the author referenced in the uploaded document.`;
+  }
+
+  if ((q.includes('what did') && q.includes('write')) || q.includes('write about')) {
+    if (title && keywords) {
+      const topKeywords = keywords
+        .split(',')
+        .map(k => k.trim())
+        .filter(Boolean)
+        .slice(0, 5)
+        .join(', ');
+      return `${title} discusses ${topKeywords}.`;
+    }
+    if (title) {
+      return `The uploaded text is titled "${title}".`;
+    }
+  }
+
+  return '';
+}
+
 function buildLocalAnswer(message, contextChunks) {
   if (!contextChunks.length) {
     return '';
+  }
+
+  const metadataAnswer = buildMetadataAnswer(message, contextChunks);
+  if (metadataAnswer) {
+    return limitReply(metadataAnswer);
   }
 
   const bestSentences = selectBestSentences(message, contextChunks);
@@ -453,6 +500,35 @@ function filterChunksByMentionedTitle(question, chunks) {
 
   if (!matchedTitles.size) return chunks;
   return chunks.filter(chunk => matchedTitles.has(chunk.title));
+}
+
+function isProfileQuestion(question) {
+  const q = String(question || '').toLowerCase();
+  return (q.includes('who is')) || (q.includes('what did') && q.includes('write')) || q.includes('write about');
+}
+
+function expandContextForProfileQuestion(question, contextChunks, allChunks) {
+  if (!isProfileQuestion(question) || !contextChunks.length) return contextChunks;
+
+  const docIds = new Set(contextChunks.map(chunk => chunk.documentId).filter(Boolean));
+  if (!docIds.size) return contextChunks;
+
+  const expanded = allChunks
+    .filter(chunk => docIds.has(chunk.documentId))
+    .slice(0, 8);
+
+  return expanded.length ? expanded : contextChunks;
+}
+
+function getTitleMatchedChunks(question, chunks) {
+  const queryTokens = new Set(tokenize(question));
+  if (!queryTokens.size) return [];
+
+  return chunks.filter(chunk => {
+    const titleBase = String(chunk.title || '').replace(/\.[^.]+$/, '');
+    const titleTokens = tokenize(titleBase);
+    return titleTokens.some(token => queryTokens.has(token));
+  });
 }
 
 function isRelevantContext(question, chunks) {
@@ -800,7 +876,16 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
     conversation.lastContextChunkIds = lexicalMatches.map(chunk => chunk.id);
   }
 
+  if (!contextChunks.length && db.chunks.length > 0) {
+    const titleMatched = getTitleMatchedChunks(message, db.chunks).slice(0, 8);
+    if (titleMatched.length > 0) {
+      contextChunks = titleMatched;
+      conversation.lastContextChunkIds = titleMatched.map(chunk => chunk.id);
+    }
+  }
+
   contextChunks = filterChunksByMentionedTitle(message, contextChunks);
+  contextChunks = expandContextForProfileQuestion(message, contextChunks, db.chunks);
   if (contextChunks.length > 0 && !isRelevantContext(message, contextChunks)) {
     contextChunks = [];
     conversation.lastContextChunkIds = [];
@@ -835,7 +920,13 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
     { role: 'user', content: message }
   ];
 
-  let reply = buildLocalAnswer(message, contextChunks) || buildNoContextReply(message);
+  let reply = buildLocalAnswer(message, contextChunks);
+  if (!reply) {
+    reply = limitReply(contextChunks.map(chunk => chunk.text).join(' '));
+  }
+  if (!reply) {
+    reply = buildNoContextReply(message);
+  }
 
   if (canUseOpenAi()) {
     try {
