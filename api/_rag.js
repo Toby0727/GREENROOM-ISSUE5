@@ -459,6 +459,16 @@ function isRelevantContext(question, chunks) {
   if (!chunks.length) return false;
 
   const questionTokens = tokenize(question);
+  const mentionsChunkTitle = chunks.some(chunk => {
+    const titleBase = String(chunk.title || '').replace(/\.[^.]+$/, '');
+    const titleTokens = tokenize(titleBase);
+    return titleTokens.some(token => questionTokens.includes(token));
+  });
+
+  if (mentionsChunkTitle) {
+    return true;
+  }
+
   const strongQuestionTokens = questionTokens.filter(token => token.length >= 5 && !WEAK_QUERY_TOKENS.has(token));
   if (!strongQuestionTokens.length) return false;
 
