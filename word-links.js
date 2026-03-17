@@ -184,8 +184,6 @@
 
   // ── main draw ─────────────────────────────────────────────────────────────
   function drawLines(container, svg, sharedWords) {
-    svg.innerHTML = '';
-    clearDots();
     svg.style.height = container.scrollHeight + 'px';
 
     const cRect  = container.getBoundingClientRect();
@@ -274,7 +272,11 @@
       if (rafId) cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
         busy = true;
-        try { update(container, svg); } finally { busy = false; }
+        try { update(container, svg); } catch (e) { console.error('[word-links]', e); }
+        // Keep busy=true until AFTER MutationObserver microtasks fire (MO callbacks
+        // are queued before this Promise.then), preventing the highlight DOM mutations
+        // from triggering an infinite re-draw loop.
+        Promise.resolve().then(() => { busy = false; });
       });
     }
 
