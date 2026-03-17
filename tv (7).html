@@ -109,8 +109,20 @@
 
   channel.bind('update', data => renderText(data.text || ''));
   channel.bind('clear',  ()   => renderText(''));
+  channel.bind('requestSync', () => {
+    if (currentText) {
+      fetch('/api/pusher', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event: 'update', data: { text: currentText } })
+      });
+    }
+  });
+
+  let currentText = '';
 
   function renderText(text) {
+    currentText = text;
     charCount.textContent = text.length;
     liveText.innerHTML = '';
     if (text) liveText.appendChild(document.createTextNode(text));

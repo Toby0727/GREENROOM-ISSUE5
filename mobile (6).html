@@ -88,6 +88,8 @@
   pusher.connection.bind('connected', () => {
     connPill.classList.add('on'); pillDot.classList.add('on');
     pillLabel.textContent = '已连接'; sendBtn.disabled = false;
+    // 新设备连上后请求当前状态
+    publish('requestSync', {});
   });
   pusher.connection.bind('disconnected', () => {
     connPill.classList.remove('on'); pillDot.classList.remove('on');
@@ -96,6 +98,10 @@
 
   channel.bind('update', data => { tvText = data.text || ''; renderPreview(tvText); });
   channel.bind('clear',  ()   => { tvText = ''; renderPreview(''); });
+  // 收到同步请求时，把自己的内容广播出去
+  channel.bind('requestSync', () => {
+    if (tvText) publish('update', { text: tvText });
+  });
 
   function renderPreview(text) {
     preview.innerHTML = '';
