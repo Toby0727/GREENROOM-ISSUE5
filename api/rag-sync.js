@@ -10,10 +10,20 @@ export default async function handler(req, res) {
 
   try {
     const result = await syncWorkspaceDocuments();
-    const workspace = await inspectWorkspaceState();
+    let workspace = { apiKeyPresent: false, searchRoots: [], sourceFiles: [] };
+    try {
+      workspace = await inspectWorkspaceState();
+    } catch {
+      // Keep default workspace diagnostics if inspection fails.
+    }
     res.status(200).json({ ok: true, ...result, workspace });
   } catch (err) {
-    const workspace = await inspectWorkspaceState();
-    res.status(400).json({ error: err.message || 'Workspace sync failed', workspace });
+    let workspace = { apiKeyPresent: false, searchRoots: [], sourceFiles: [] };
+    try {
+      workspace = await inspectWorkspaceState();
+    } catch {
+      // Keep default workspace diagnostics if inspection fails.
+    }
+    res.status(400).json({ error: err?.message || 'Workspace sync failed', workspace });
   }
 }

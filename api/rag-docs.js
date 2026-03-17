@@ -15,7 +15,12 @@ export default async function handler(req, res) {
     ]);
     res.status(200).json({ documents, workspace });
   } catch (err) {
-    const workspace = await inspectWorkspaceState();
-    res.status(200).json({ documents: [], workspace, error: err.message || 'Document listing failed' });
+    let workspace = { apiKeyPresent: false, searchRoots: [], sourceFiles: [] };
+    try {
+      workspace = await inspectWorkspaceState();
+    } catch {
+      // Keep default workspace diagnostics if inspection fails.
+    }
+    res.status(200).json({ documents: [], workspace, error: err?.message || 'Document listing failed' });
   }
 }

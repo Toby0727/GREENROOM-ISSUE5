@@ -352,7 +352,7 @@
       thinkBlock.removeChild(thinkEl);
       const errEl = document.createElement('div');
       errEl.className = 'msg-text ai';
-      errEl.textContent = '[error reaching ai]';
+      errEl.textContent = `[error: ${err?.message || 'reaching ai'}]`;
       thinkBlock.appendChild(errEl);
     }
   }

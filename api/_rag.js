@@ -359,8 +359,9 @@ async function readWorkspaceDocumentFiles() {
 
       const files = await walkDirectory(absDir);
       for (const filePath of files) {
-        if (seenPaths.has(filePath)) continue;
-        seenPaths.add(filePath);
+        const canonicalPath = path.resolve(filePath);
+        if (seenPaths.has(canonicalPath)) continue;
+        seenPaths.add(canonicalPath);
 
         const content = await fs.readFile(filePath, 'utf8');
         const relativePath = path.relative(root, filePath);
@@ -390,8 +391,9 @@ async function listWorkspaceSourceFiles() {
 
       const files = await walkDirectory(absDir);
       for (const filePath of files) {
-        if (seenPaths.has(filePath)) continue;
-        seenPaths.add(filePath);
+        const canonicalPath = path.resolve(filePath);
+        if (seenPaths.has(canonicalPath)) continue;
+        seenPaths.add(canonicalPath);
 
         const stats = await fs.stat(filePath);
         const relativePath = path.relative(root, filePath);
@@ -419,8 +421,9 @@ async function getWorkspaceSignature() {
 
       const files = await walkDirectory(absDir);
       for (const filePath of files) {
-        if (seenPaths.has(filePath)) continue;
-        seenPaths.add(filePath);
+        const canonicalPath = path.resolve(filePath);
+        if (seenPaths.has(canonicalPath)) continue;
+        seenPaths.add(canonicalPath);
 
         const stats = await fs.stat(filePath);
         const relativePath = path.relative(root, filePath);
@@ -441,8 +444,9 @@ async function resolvePreloadSources() {
     for (const relPath of PRELOAD_DOC_CANDIDATES) {
       const absPath = path.join(root, relPath);
       if (!await pathExists(absPath)) continue;
-      if (seenPaths.has(absPath)) continue;
-      seenPaths.add(absPath);
+      const canonicalPath = path.resolve(absPath);
+      if (seenPaths.has(canonicalPath)) continue;
+      seenPaths.add(canonicalPath);
 
       const content = await fs.readFile(absPath, 'utf8');
       if (!String(content).trim()) continue;
@@ -490,8 +494,16 @@ export async function uploadDocument({ title, content, sourcePath = null }) {
     throw new Error('Could not create chunks from document content');
   }
 
-  const embeddings = await embedTexts(chunks);
-  const embeddingProvider = canUseOpenAi() ? 'openai' : 'local';
+  let embeddings;
+  let embeddingProvider = 'local';
+
+  try {
+    embeddings = await embedTexts(chunks);
+    embeddingProvider = canUseOpenAi() ? 'openai' : 'local';
+  } catch {
+    embeddings = chunks.map(text => buildLocalEmbedding(text));
+    embeddingProvider = 'local';
+  }
   const db = getDb();
   const documentId = `doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -627,18 +639,22 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
   if (!contextChunks.length) {
     const vectorChunks = db.chunks.filter(chunk => Array.isArray(chunk.embedding));
     if (vectorChunks.length > 0) {
-      const [questionEmbedding] = await embedTexts([message]);
-      const scored = vectorChunks
-        .map(chunk => ({
-          ...chunk,
-          score: cosineSimilarity(questionEmbedding, chunk.embedding)
-        }))
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 6)
-        .filter(c => c.score > 0.15);
+      try {
+        const [questionEmbedding] = await embedTexts([message]);
+        const scored = vectorChunks
+          .map(chunk => ({
+            ...chunk,
+            score: cosineSimilarity(questionEmbedding, chunk.embedding)
+          }))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 6)
+          .filter(c => c.score > 0.15);
 
-      contextChunks = scored;
-      conversation.lastContextChunkIds = scored.map(c => c.id);
+        contextChunks = scored;
+        conversation.lastContextChunkIds = scored.map(c => c.id);
+      } catch {
+        // If vector query fails (e.g. bad API key), lexical retrieval below still runs.
+      }
     }
   }
 
@@ -672,14 +688,21 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
     { role: 'user', content: message }
   ];
 
-  const reply = canUseOpenAi()
-    ? limitReply((await openAiJson('/chat/completions', {
+  let reply = buildLocalAnswer(message, contextChunks);
+
+  if (canUseOpenAi()) {
+    try {
+      const completion = await openAiJson('/chat/completions', {
         model: CHAT_MODEL,
         messages: promptMessages,
         max_tokens: 180,
         temperature: 0.3
-      }))?.choices?.[0]?.message?.content || '')
-    : buildLocalAnswer(message, contextChunks);
+      });
+      reply = limitReply(completion?.choices?.[0]?.message?.content || reply);
+    } catch {
+      // Keep local fallback reply when OpenAI generation fails.
+    }
+  }
 
   const citations = contextChunks.map(c => ({
     documentId: c.documentId,
