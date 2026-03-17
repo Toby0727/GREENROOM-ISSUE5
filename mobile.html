@@ -65,8 +65,8 @@
     </div>
     <textarea id="msg-input" placeholder="在这里打字…" rows="2"></textarea>
     <div class="send-row">
-      <button class="send-btn" id="send-btn" disabled>发送到大屏</button>
-      <button class="append-btn" id="append-btn">追加</button>
+      <button class="send-btn" id="send-btn" disabled>新行发送</button>
+      <button class="append-btn" id="append-btn">接续</button>
     </div>
   </div>
 </div>
@@ -116,16 +116,16 @@
   sendBtn.addEventListener('click', async () => {
     const text = msgInput.value.trim();
     if (!text) return;
-    tvText = text;
+    tvText = tvText ? tvText + '\n' + text : text;
     renderPreview(tvText);
     msgInput.value = ''; autoResize();
-    await publish('update', { text });
+    await publish('update', { text: tvText });
   });
 
   appendBtn.addEventListener('click', async () => {
-    const text = msgInput.value;
+    const text = msgInput.value.trim();
     if (!text) return;
-    tvText = tvText ? tvText + '\n' + text : text;
+    tvText = tvText ? tvText + ' ' + text : text;
     renderPreview(tvText);
     msgInput.value = ''; autoResize();
     await publish('update', { text: tvText });
