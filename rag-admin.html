@@ -115,11 +115,24 @@
     const docsEl = document.getElementById('docs');
     const workspaceEl = document.getElementById('workspace');
 
+    async function parseApiResponse(res) {
+      const raw = await res.text();
+      let data = null;
+
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        data = { error: raw || `Request failed with ${res.status}` };
+      }
+
+      return data;
+    }
+
     document.getElementById('sync').addEventListener('click', async () => {
       setStatus('Scanning workspace folders and indexing files...', '');
       try {
         const res = await fetch('/api/rag-sync', { method: 'POST' });
-        const data = await res.json();
+        const data = await parseApiResponse(res);
         if (!res.ok) throw new Error(data.error || 'Sync failed');
 
         setStatus(`Indexed ${data.indexedCount} workspace document(s).`, 'ok');
@@ -142,7 +155,8 @@
       docsEl.innerHTML = '';
       try {
         const res = await fetch('/api/rag-docs');
-        const data = await res.json();
+        const data = await parseApiResponse(res);
+        if (!res.ok) throw new Error(data.error || 'Could not load documents');
         const docs = data.documents || [];
         renderWorkspace(data.workspace, data.error);
 

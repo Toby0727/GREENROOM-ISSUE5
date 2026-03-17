@@ -307,7 +307,14 @@
           sessionId: 'tv-main'
         })
       });
-      const data = await res.json();
+      const raw = await res.text();
+      let data;
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        data = { error: raw || `Request failed with ${res.status}` };
+      }
+      if (!res.ok) throw new Error(data.error || 'RAG chat request failed');
       const reply = data.reply || '...';
 
       chatHistory.push({ role: 'assistant', content: reply });
