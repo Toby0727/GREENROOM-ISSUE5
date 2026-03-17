@@ -43,11 +43,11 @@
     s.textContent = `
 @keyframes wl-pulse {
   0%,100% {
-    text-shadow: 0 0 4px var(--wl-c), 0 0 12px var(--wl-c), 0 0 20px var(--wl-c);
+    text-shadow: 0 0 2px var(--wl-c), 0 0 12px var(--wl-c), 0 0 20px var(--wl-c);
     opacity: 0.6;
   }
   50% {
-    text-shadow: 0 0 6px var(--wl-c), 0 0 20px var(--wl-c), 0 0 40px var(--wl-c), 0 0 70px var(--wl-c);
+    text-shadow: 0 0 4px var(--wl-c), 0 0 20px var(--wl-c), 0 0 40px var(--wl-c), 0 0 50px var(--wl-c);
     opacity: 1;
   }
 }
