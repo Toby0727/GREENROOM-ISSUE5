@@ -2,233 +2,48 @@
 <html lang="zh">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>参与互动</title>
-<script src="https://cdn.jsdelivr.net/npm/ably@1.2.50/ably.min.js"></script>
+<script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Bebas+Neue&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-  html, body {
-    width: 100%;
-    min-height: 100%;
-    background: #080808;
-    font-family: 'Space Mono', monospace;
-    color: #e0e0e0;
-    overflow-x: hidden;
-  }
-
-  .screen {
-    width: 100%;
-    min-height: 100dvh;
-    display: flex;
-    flex-direction: column;
-    padding: 0;
-  }
-
-  /* HEADER */
-  .header {
-    flex-shrink: 0;
-    padding: 28px 24px 20px;
-    border-bottom: 1px solid #161616;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
+  html, body { width: 100%; min-height: 100%; background: #080808; font-family: 'Space Mono', monospace; color: #e0e0e0; }
+  .screen { width: 100%; min-height: 100dvh; display: flex; flex-direction: column; }
+  .header { flex-shrink: 0; padding: 28px 24px 20px; border-bottom: 1px solid #161616; display: flex; align-items: center; justify-content: space-between; }
   .title-block { display: flex; flex-direction: column; gap: 5px; }
-
-  .title {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 26px;
-    letter-spacing: 0.08em;
-    color: #e8e8e8;
-    line-height: 1;
-  }
-
-  .subtitle {
-    font-size: 8px;
-    letter-spacing: 0.22em;
-    color: #333;
-    text-transform: uppercase;
-  }
-
-  .conn-pill {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    border: 1px solid #1c1c1c;
-  }
-
-  .pill-dot {
-    width: 5px; height: 5px;
-    background: #333;
-    border-radius: 50%;
-    transition: background 0.3s;
-  }
+  .title { font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: 0.08em; color: #e8e8e8; line-height: 1; }
+  .subtitle { font-size: 8px; letter-spacing: 0.22em; color: #333; text-transform: uppercase; }
+  .conn-pill { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid #1c1c1c; }
+  .pill-dot { width: 5px; height: 5px; background: #333; border-radius: 50%; transition: background 0.3s; }
   .pill-dot.on { background: #aaa; animation: throb 2s ease-in-out infinite; }
-
-  @keyframes throb {
-    0%,100% { opacity: 1; }
-    50%      { opacity: 0.2; }
-  }
-
-  .pill-label {
-    font-size: 8px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: #333;
-    transition: color 0.3s;
-  }
+  @keyframes throb { 0%,100% { opacity: 1; } 50% { opacity: 0.2; } }
+  .pill-label { font-size: 8px; letter-spacing: 0.15em; text-transform: uppercase; color: #333; transition: color 0.3s; }
   .conn-pill.on .pill-label { color: #666; }
-
-  /* PREVIEW */
-  .preview {
-    flex: 1;
-    min-height: 120px;
-    overflow-y: auto;
-    padding: 24px;
-    scrollbar-width: none;
-  }
+  .preview { flex: 1; min-height: 120px; overflow-y: auto; padding: 24px; scrollbar-width: none; }
   .preview::-webkit-scrollbar { display: none; }
-
-  .preview-label {
-    font-size: 8px;
-    letter-spacing: 0.2em;
-    color: #222;
-    text-transform: uppercase;
-    margin-bottom: 14px;
-  }
-
-  #preview-text {
-    font-size: 18px;
-    line-height: 1.7;
-    color: #585858;
-    word-break: break-word;
-    white-space: pre-wrap;
-    min-height: 40px;
-  }
-
-  .preview-cursor {
-    display: inline-block;
-    width: 10px; height: 18px;
-    background: #2a2a2a;
-    vertical-align: text-bottom;
-    animation: blink 1s step-end infinite;
-    margin-left: 2px;
-  }
+  .preview-label { font-size: 8px; letter-spacing: 0.2em; color: #222; text-transform: uppercase; margin-bottom: 14px; }
+  #preview-text { font-size: 18px; line-height: 1.7; color: #585858; word-break: break-word; white-space: pre-wrap; min-height: 40px; }
+  .preview-cursor { display: inline-block; width: 10px; height: 18px; background: #2a2a2a; vertical-align: text-bottom; animation: blink 1s step-end infinite; margin-left: 2px; }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
-
-  /* INPUT AREA */
-  .input-area {
-    flex-shrink: 0;
-    background: #0e0e0e;
-    border-top: 1px solid #161616;
-    padding: 16px 20px env(safe-area-inset-bottom, 24px);
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    position: sticky;
-    bottom: 0;
-  }
-
-  .char-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .char-hint {
-    font-size: 8px;
-    letter-spacing: 0.15em;
-    color: #222;
-    text-transform: uppercase;
-  }
-
-  .clear-btn {
-    background: transparent;
-    border: 1px solid #1c1c1c;
-    color: #2a2a2a;
-    font-family: 'Space Mono', monospace;
-    font-size: 8px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    padding: 5px 12px;
-    cursor: pointer;
-    transition: all 0.15s;
-    -webkit-tap-highlight-color: transparent;
-  }
+  .input-area { flex-shrink: 0; background: #0e0e0e; border-top: 1px solid #161616; padding: 16px 20px env(safe-area-inset-bottom, 24px); display: flex; flex-direction: column; gap: 12px; position: sticky; bottom: 0; }
+  .char-bar { display: flex; align-items: center; justify-content: space-between; }
+  .char-hint { font-size: 8px; letter-spacing: 0.15em; color: #222; text-transform: uppercase; }
+  .clear-btn { background: transparent; border: 1px solid #1c1c1c; color: #2a2a2a; font-family: 'Space Mono', monospace; font-size: 8px; letter-spacing: 0.18em; text-transform: uppercase; padding: 5px 12px; cursor: pointer; }
   .clear-btn:active { color: #666; border-color: #333; }
-
-  .textarea-wrap {
-    position: relative;
-  }
-
-  #msg-input {
-    width: 100%;
-    background: transparent;
-    border: none;
-    border-bottom: 1px solid #1e1e1e;
-    color: #e0e0e0;
-    font-family: 'Space Mono', monospace;
-    font-size: 16px;
-    line-height: 1.6;
-    padding: 10px 0 10px;
-    outline: none;
-    resize: none;
-    min-height: 56px;
-    max-height: 160px;
-    transition: border-color 0.2s;
-    caret-color: #888;
-  }
+  #msg-input { width: 100%; background: transparent; border: none; border-bottom: 1px solid #1e1e1e; color: #e0e0e0; font-family: 'Space Mono', monospace; font-size: 16px; line-height: 1.6; padding: 10px 0; outline: none; resize: none; min-height: 56px; max-height: 160px; caret-color: #888; }
   #msg-input::placeholder { color: #1e1e1e; }
   #msg-input:focus { border-color: #333; }
-
-  .send-row {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-  }
-
-  .send-btn {
-    flex: 1;
-    background: #e8e8e8;
-    border: none;
-    color: #080808;
-    font-family: 'Space Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    padding: 14px 0;
-    cursor: pointer;
-    transition: background 0.15s;
-    -webkit-tap-highlight-color: transparent;
-  }
+  .send-row { display: flex; gap: 10px; align-items: center; }
+  .send-btn { flex: 1; background: #e8e8e8; border: none; color: #080808; font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; padding: 14px 0; cursor: pointer; }
   .send-btn:active { background: #bbb; }
   .send-btn:disabled { background: #1a1a1a; color: #333; cursor: default; }
-
-  .append-btn {
-    background: transparent;
-    border: 1px solid #1c1c1c;
-    color: #2e2e2e;
-    font-family: 'Space Mono', monospace;
-    font-size: 9px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    padding: 14px 16px;
-    cursor: pointer;
-    transition: all 0.15s;
-    -webkit-tap-highlight-color: transparent;
-    white-space: nowrap;
-  }
+  .append-btn { background: transparent; border: 1px solid #1c1c1c; color: #2e2e2e; font-family: 'Space Mono', monospace; font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; padding: 14px 16px; cursor: pointer; white-space: nowrap; }
   .append-btn:active { color: #666; border-color: #333; }
 </style>
 </head>
 <body>
-
 <div class="screen">
-  <!-- HEADER -->
   <div class="header">
     <div class="title-block">
       <div class="title">LIVE DOC</div>
@@ -239,33 +54,31 @@
       <span class="pill-label" id="pill-label">连接中</span>
     </div>
   </div>
-
-  <!-- PREVIEW of what's on TV -->
   <div class="preview">
     <div class="preview-label">— 电视上显示的内容</div>
     <div id="preview-text"><span class="preview-cursor"></span></div>
   </div>
-
-  <!-- INPUT -->
   <div class="input-area">
     <div class="char-bar">
       <span class="char-hint">输入内容 · 实时同步到大屏</span>
       <button class="clear-btn" id="clear-btn">清空</button>
     </div>
-    <div class="textarea-wrap">
-      <textarea id="msg-input" placeholder="在这里打字…" rows="2"></textarea>
-    </div>
+    <textarea id="msg-input" placeholder="在这里打字…" rows="2"></textarea>
     <div class="send-row">
-      <button class="send-btn" id="send-btn">发送到大屏</button>
+      <button class="send-btn" id="send-btn" disabled>发送到大屏</button>
       <button class="append-btn" id="append-btn">追加</button>
     </div>
   </div>
 </div>
 
 <script>
-  const ABLY_KEY = '7QGBGw.Vz9tfw:4309G68-vx0dcWNUgJI2Vqi4qaAp-4Gpb2f2ULRMb4o';
-  const ably   = new Ably.Realtime.Promise({ key: ABLY_KEY });
-  const channel = ably.channels.get('livedoc');
+  const APP_ID  = '2128688';
+  const KEY     = '8e1cefae4252719fab23';
+  const SECRET  = '17bdb8a6f3c6cb79486d';
+  const CLUSTER = 'us2';
+
+  const pusher  = new Pusher(KEY, { cluster: CLUSTER, forceTLS: true });
+  const channel = pusher.subscribe('livedoc');
 
   const connPill  = document.getElementById('conn-pill');
   const pillDot   = document.getElementById('pill-dot');
@@ -278,28 +91,21 @@
 
   let tvText = '';
 
-  // ── CONNECTION STATE ──
-  ably.connection.on('connected', () => {
+  pusher.connection.bind('connected', () => {
     connPill.classList.add('on');
     pillDot.classList.add('on');
     pillLabel.textContent = '已连接';
     sendBtn.disabled = false;
   });
-  ably.connection.on('disconnected', () => {
+  pusher.connection.bind('disconnected', () => {
     connPill.classList.remove('on');
     pillDot.classList.remove('on');
     pillLabel.textContent = '已断开';
+    sendBtn.disabled = true;
   });
 
-  // ── RECEIVE UPDATES (preview what's on TV) ──
-  channel.subscribe('update', msg => {
-    tvText = msg.data || '';
-    renderPreview(tvText);
-  });
-  channel.subscribe('clear', () => {
-    tvText = '';
-    renderPreview('');
-  });
+  channel.bind('update', data => { tvText = data.text || ''; renderPreview(tvText); });
+  channel.bind('clear',  ()   => { tvText = ''; renderPreview(''); });
 
   function renderPreview(text) {
     preview.innerHTML = '';
@@ -309,47 +115,104 @@
     preview.appendChild(cur);
   }
 
-  // ── SEND (replace) ──
-  sendBtn.addEventListener('click', () => {
+  async function publish(event, data) {
+    // Use Pusher HTTP API via fetch with MD5 auth
+    const body = JSON.stringify({ name: event, channel: 'livedoc', data: JSON.stringify(data) });
+    const timestamp = Math.floor(Date.now() / 1000);
+    const bodyMd5 = await md5(body);
+    const stringToSign = `POST\n/apps/${APP_ID}/events\nauth_key=${KEY}&auth_timestamp=${timestamp}&auth_version=1.0&body_md5=${bodyMd5}&channels[]=livedoc&name=${event}`;
+    const signature = await hmacSha256(SECRET, stringToSign);
+    const url = `https://api-${CLUSTER}.pusher.com/apps/${APP_ID}/events?auth_key=${KEY}&auth_timestamp=${timestamp}&auth_version=1.0&body_md5=${bodyMd5}&auth_signature=${signature}`;
+    await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+  }
+
+  // Simple MD5 and HMAC-SHA256 using Web Crypto API
+  async function hmacSha256(secret, message) {
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const sig = await crypto.subtle.sign('HMAC', key, enc.encode(message));
+    return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  async function md5(str) {
+    // Use a simple fetch to generate MD5 — fallback: use empty string workaround
+    // Since Web Crypto doesn't support MD5, we'll compute it manually
+    return md5sync(str);
+  }
+
+  function md5sync(string) {
+    function safeAdd(x, y) { const lsw = (x & 0xffff) + (y & 0xffff); const msw = (x >> 16) + (y >> 16) + (lsw >> 16); return (msw << 16) | (lsw & 0xffff); }
+    function bitRotateLeft(num, cnt) { return (num << cnt) | (num >>> (32 - cnt)); }
+    function md5cmn(q, a, b, x, s, t) { return safeAdd(bitRotateLeft(safeAdd(safeAdd(a, q), safeAdd(x, t)), s), b); }
+    function md5ff(a, b, c, d, x, s, t) { return md5cmn((b & c) | (~b & d), a, b, x, s, t); }
+    function md5gg(a, b, c, d, x, s, t) { return md5cmn((b & d) | (c & ~d), a, b, x, s, t); }
+    function md5hh(a, b, c, d, x, s, t) { return md5cmn(b ^ c ^ d, a, b, x, s, t); }
+    function md5ii(a, b, c, d, x, s, t) { return md5cmn(c ^ (b | ~d), a, b, x, s, t); }
+    const utf8 = unescape(encodeURIComponent(string));
+    const bytes = [];
+    for (let i = 0; i < utf8.length; i++) bytes.push(utf8.charCodeAt(i));
+    bytes.push(0x80);
+    while (bytes.length % 64 !== 56) bytes.push(0);
+    const bitLen = utf8.length * 8;
+    bytes.push(bitLen & 0xff, (bitLen >> 8) & 0xff, (bitLen >> 16) & 0xff, (bitLen >> 24) & 0xff, 0, 0, 0, 0);
+    let [a, b, c, d] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476];
+    for (let i = 0; i < bytes.length; i += 64) {
+      const M = [];
+      for (let j = 0; j < 16; j++) M[j] = bytes[i+j*4] | (bytes[i+j*4+1] << 8) | (bytes[i+j*4+2] << 16) | (bytes[i+j*4+3] << 24);
+      let [aa, bb, cc, dd] = [a, b, c, d];
+      a=md5ff(a,b,c,d,M[0],7,-680876936);d=md5ff(d,a,b,c,M[1],12,-389564586);c=md5ff(c,d,a,b,M[2],17,606105819);b=md5ff(b,c,d,a,M[3],22,-1044525330);
+      a=md5ff(a,b,c,d,M[4],7,-176418897);d=md5ff(d,a,b,c,M[5],12,1200080426);c=md5ff(c,d,a,b,M[6],17,-1473231341);b=md5ff(b,c,d,a,M[7],22,-45705983);
+      a=md5ff(a,b,c,d,M[8],7,1770035416);d=md5ff(d,a,b,c,M[9],12,-1958414417);c=md5ff(c,d,a,b,M[10],17,-42063);b=md5ff(b,c,d,a,M[11],22,-1990404162);
+      a=md5ff(a,b,c,d,M[12],7,1804603682);d=md5ff(d,a,b,c,M[13],12,-40341101);c=md5ff(c,d,a,b,M[14],17,-1502002290);b=md5ff(b,c,d,a,M[15],22,1236535329);
+      a=md5gg(a,b,c,d,M[1],5,-165796510);d=md5gg(d,a,b,c,M[6],9,-1069501632);c=md5gg(c,d,a,b,M[11],14,643717713);b=md5gg(b,c,d,a,M[0],20,-373897302);
+      a=md5gg(a,b,c,d,M[5],5,-701558691);d=md5gg(d,a,b,c,M[10],9,38016083);c=md5gg(c,d,a,b,M[15],14,-660478335);b=md5gg(b,c,d,a,M[4],20,-405537848);
+      a=md5gg(a,b,c,d,M[9],5,568446438);d=md5gg(d,a,b,c,M[14],9,-1019803690);c=md5gg(c,d,a,b,M[3],14,-187363961);b=md5gg(b,c,d,a,M[8],20,1163531501);
+      a=md5gg(a,b,c,d,M[13],5,-1444681467);d=md5gg(d,a,b,c,M[2],9,-51403784);c=md5gg(c,d,a,b,M[7],14,1735328473);b=md5gg(b,c,d,a,M[12],20,-1926607734);
+      a=md5hh(a,b,c,d,M[5],4,-378558);d=md5hh(d,a,b,c,M[8],11,-2022574463);c=md5hh(c,d,a,b,M[11],16,1839030562);b=md5hh(b,c,d,a,M[14],23,-35309556);
+      a=md5hh(a,b,c,d,M[1],4,-1530992060);d=md5hh(d,a,b,c,M[4],11,1272893353);c=md5hh(c,d,a,b,M[7],16,-155497632);b=md5hh(b,c,d,a,M[10],23,-1094730640);
+      a=md5hh(a,b,c,d,M[13],4,681279174);d=md5hh(d,a,b,c,M[0],11,-358537222);c=md5hh(c,d,a,b,M[3],16,-722521979);b=md5hh(b,c,d,a,M[6],23,76029189);
+      a=md5hh(a,b,c,d,M[9],4,-640364487);d=md5hh(d,a,b,c,M[12],11,-421815835);c=md5hh(c,d,a,b,M[15],16,530742520);b=md5hh(b,c,d,a,M[2],23,-995338651);
+      a=md5ii(a,b,c,d,M[0],6,-198630844);d=md5ii(d,a,b,c,M[7],10,1126891415);c=md5ii(c,d,a,b,M[14],15,-1416354905);b=md5ii(b,c,d,a,M[5],21,-57434055);
+      a=md5ii(a,b,c,d,M[12],6,1700485571);d=md5ii(d,a,b,c,M[3],10,-1894986606);c=md5ii(c,d,a,b,M[10],15,-1051523);b=md5ii(b,c,d,a,M[1],21,-2054922799);
+      a=md5ii(a,b,c,d,M[8],6,1873313359);d=md5ii(d,a,b,c,M[15],10,-30611744);c=md5ii(c,d,a,b,M[6],15,-1560198380);b=md5ii(b,c,d,a,M[13],21,1309151649);
+      a=md5ii(a,b,c,d,M[4],6,-145523070);d=md5ii(d,a,b,c,M[11],10,-1120210379);c=md5ii(c,d,a,b,M[2],15,718787259);b=md5ii(b,c,d,a,M[9],21,-343485551);
+      a=safeAdd(a,aa); b=safeAdd(b,bb); c=safeAdd(c,cc); d=safeAdd(d,dd);
+    }
+    return [a,b,c,d].map(n => (n>>>0).toString(16).padStart(8,'0').match(/../g).reverse().join('')).join('');
+  }
+
+  sendBtn.addEventListener('click', async () => {
     const text = msgInput.value.trim();
     if (!text) return;
-    channel.publish('update', text);
     tvText = text;
     renderPreview(tvText);
     msgInput.value = '';
     autoResize();
+    await publish('update', { text });
   });
 
-  // ── APPEND ──
-  appendBtn.addEventListener('click', () => {
+  appendBtn.addEventListener('click', async () => {
     const text = msgInput.value;
     if (!text) return;
-    const newText = tvText ? tvText + '\n' + text : text;
-    channel.publish('update', newText);
-    tvText = newText;
+    tvText = tvText ? tvText + '\n' + text : text;
     renderPreview(tvText);
     msgInput.value = '';
     autoResize();
+    await publish('update', { text: tvText });
   });
 
-  // ── CLEAR ──
-  clearBtn.addEventListener('click', () => {
-    channel.publish('clear', '');
+  clearBtn.addEventListener('click', async () => {
     tvText = '';
     renderPreview('');
     msgInput.value = '';
     autoResize();
+    await publish('clear', {});
   });
 
-  // ── SEND ON ENTER (shift+enter = newline) ──
   msgInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendBtn.click();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBtn.click(); }
   });
 
-  // ── AUTO-RESIZE TEXTAREA ──
   function autoResize() {
     msgInput.style.height = 'auto';
     msgInput.style.height = Math.min(msgInput.scrollHeight, 160) + 'px';
