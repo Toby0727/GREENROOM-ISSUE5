@@ -9,6 +9,7 @@ const WORKSPACE_ROOT = process.cwd();
 const WORKSPACE_DOC_DIRS = ['.rag-docs', 'writings', 'knowledge', 'docs'];
 const TEXT_FILE_EXTENSIONS = new Set(['.txt', '.md', '.markdown', '.text']);
 const LOCAL_EMBEDDING_DIMS = 256;
+const METADATA_FIELDS = ['title', 'author', 'date', 'type', 'keywords', 'author_interests'];
 const WEAK_QUERY_TOKENS = new Set([
   'who', 'what', 'when', 'where', 'why', 'how', 'which', 'that', 'this', 'those', 'these',
   'have', 'with', 'from', 'into', 'about', 'there', 'their', 'your', 'ours', 'they', 'them',
@@ -256,9 +257,25 @@ function selectBestExcerpt(message, contextChunks) {
 }
 
 function extractMetadataField(text, fieldName) {
-  const pattern = new RegExp(`${fieldName}:\\s*([^\\n]+?)(?=\\s+[a-z_]+:\\s|$)`, 'i');
-  const match = String(text || '').match(pattern);
-  return match ? match[1].trim() : '';
+  const source = String(text || '');
+  const lower = source.toLowerCase();
+  const fieldToken = `${String(fieldName || '').toLowerCase()}:`;
+  const start = lower.indexOf(fieldToken);
+  if (start === -1) return '';
+
+  let end = source.length;
+  const valueStart = start + fieldToken.length;
+
+  for (const candidate of METADATA_FIELDS) {
+    if (candidate.toLowerCase() === String(fieldName || '').toLowerCase()) continue;
+    const marker = `${candidate.toLowerCase()}:`;
+    const idx = lower.indexOf(marker, valueStart);
+    if (idx !== -1 && idx < end) {
+      end = idx;
+    }
+  }
+
+  return source.slice(valueStart, end).trim();
 }
 
 function buildMetadataAnswer(message, contextChunks) {
@@ -889,6 +906,14 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
   if (contextChunks.length > 0 && !isRelevantContext(message, contextChunks)) {
     contextChunks = [];
     conversation.lastContextChunkIds = [];
+  }
+
+  if (!contextChunks.length && db.chunks.length > 0) {
+    const titleMatched = getTitleMatchedChunks(message, db.chunks).slice(0, 8);
+    if (titleMatched.length > 0) {
+      contextChunks = titleMatched;
+      conversation.lastContextChunkIds = titleMatched.map(chunk => chunk.id);
+    }
   }
 
   if (contextChunks.length > 0) {
