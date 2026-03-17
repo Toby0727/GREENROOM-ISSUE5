@@ -38,19 +38,16 @@
     if (document.getElementById('wl-styles')) return;
     const s = document.createElement('style');
     s.id = 'wl-styles';
-    // Uses --wl-c custom property (set inline per mark) for reliable animation.
-    // currentColor in @keyframes text-shadow is not consistently interpolated
-    // across browsers — CSS custom properties are.
+    // text-shadow only — filter:drop-shadow is clipped by overflow:auto parents.
+    // Values are intentionally large so the glow is unmissable on a dark background.
     s.textContent = `
 @keyframes wl-pulse {
   0%,100% {
-    text-shadow: 0 0 6px var(--wl-c), 0 0 14px var(--wl-c);
-    filter: drop-shadow(0 0 3px var(--wl-c));
-    opacity: 0.65;
+    text-shadow: 0 0 4px var(--wl-c), 0 0 12px var(--wl-c), 0 0 20px var(--wl-c);
+    opacity: 0.6;
   }
   50% {
-    text-shadow: 0 0 10px var(--wl-c), 0 0 30px var(--wl-c), 0 0 60px var(--wl-c);
-    filter: drop-shadow(0 0 8px var(--wl-c)) drop-shadow(0 0 16px var(--wl-c));
+    text-shadow: 0 0 6px var(--wl-c), 0 0 20px var(--wl-c), 0 0 40px var(--wl-c), 0 0 70px var(--wl-c);
     opacity: 1;
   }
 }
