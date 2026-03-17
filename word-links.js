@@ -118,19 +118,20 @@ mark[data-wl-word] {
   // ── update cycle ──────────────────────────────────────────────────────────
   function update(container) {
     const els = readyTextEls(container);
-    els.forEach(restoreEl);
 
+    // Build word map, reading wlOrig (plain text) when already highlighted
     const wordMap = Object.create(null);
     els.forEach(e => {
-      tokenizeUnique(e.textContent).forEach(w => {
+      const text = e.dataset.wlOrig !== undefined ? e.dataset.wlOrig : e.textContent;
+      tokenizeUnique(text).forEach(w => {
         if (!wordMap[w]) wordMap[w] = [];
         wordMap[w].push(e);
       });
     });
 
     const shared = Object.keys(wordMap).filter(w => wordMap[w].length >= 2);
-    if (!shared.length) return;
 
+    // Build per-element word list
     const elWords = new Map();
     shared.forEach(word => {
       wordMap[word].forEach(e => {
@@ -139,7 +140,21 @@ mark[data-wl-word] {
       });
     });
 
-    elWords.forEach((words, e) => highlightEl(e, words));
+    // Only touch elements whose highlighted-word set has actually changed.
+    // This prevents animation from restarting every 60ms due to MO re-fires.
+    els.forEach(el => {
+      const newWords = (elWords.get(el) || []).slice().sort().join('\x00');
+      const curWords = el.dataset.wlWords || '';
+      if (newWords === curWords) return;  // nothing changed — leave marks alone
+
+      restoreEl(el);
+      if (newWords) {
+        highlightEl(el, elWords.get(el));
+        el.dataset.wlWords = newWords;
+      } else {
+        delete el.dataset.wlWords;
+      }
+    });
   }
 
   // ── init ──────────────────────────────────────────────────────────────────
