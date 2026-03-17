@@ -1,16 +1,12 @@
 // word-links.js
-// Connects repeated words across all messages (user + AI) with straight pinned
-// investigation-board lines that glow and spark.
+// Highlights words that appear in multiple messages with a pulsing colour glow.
+// 0.5 Hz pulse (2s cycle). No lines, no SVG.
 (function () {
   'use strict';
 
   // ── config ────────────────────────────────────────────────────────────────
-  const MIN_WORD_LEN   = 4;
-  const LINE_WIDTH     = 2.2;
-  const DOT_DUR_MIN    = 1.0;   // seconds per traversal (min)
-  const DOT_DUR_MAX    = 2.2;   // seconds per traversal (max)
-  const DOT_PAUSE_MIN  = 60;    // ms gap between traversals (min)
-  const DOT_PAUSE_MAX  = 350;   // ms gap between traversals (max)
+  const MIN_WORD_LEN  = 4;
+  const PULSE_DUR_S   = 2.0;  // 1 full cycle = 0.5 Hz
   const STOP_WORDS = new Set([
     'that','this','with','have','from','they','been','were','what','when',
     'where','your','their','will','would','could','should','about','there',
@@ -33,9 +29,29 @@
   let colorIdx = 0;
   const wordColors = Object.create(null);
   function getColor(w) {
-    if (!wordColors[w]) { wordColors[w] = COLORS[colorIdx++ % COLORS.length]; }
+    if (!wordColors[w]) wordColors[w] = COLORS[colorIdx++ % COLORS.length];
     return wordColors[w];
   }
+
+  // ── inject keyframe CSS once ──────────────────────────────────────────────
+  (function injectStyles() {
+    if (document.getElementById('wl-styles')) return;
+    const s = document.createElement('style');
+    s.id = 'wl-styles';
+    s.textContent = `
+@keyframes wl-pulse {
+  0%,100% { text-shadow: 0 0 4px currentColor, 0 0 10px currentColor; opacity: 0.72; }
+  50%      { text-shadow: 0 0 8px currentColor, 0 0 24px currentColor, 0 0 48px currentColor; opacity: 1; }
+}
+mark[data-wl-word] {
+  background: transparent;
+  border-bottom: 1.5px solid currentColor;
+  padding-bottom: 1px;
+  border-radius: 1px;
+  animation: wl-pulse ${PULSE_DUR_S}s ease-in-out infinite;
+}`;
+    document.head.appendChild(s);
+  })();
 
   // ── text helpers ──────────────────────────────────────────────────────────
   function tokenizeUnique(text) {
@@ -66,25 +82,16 @@
   function highlightEl(el, words) {
     const text = el.textContent;
     el.dataset.wlOrig = text;
-    const re  = new RegExp(`\\b(${words.map(escRe).join('|')})\\b`, 'gi');
+    const re   = new RegExp(`\\b(${words.map(escRe).join('|')})\\b`, 'gi');
     const frag = document.createDocumentFragment();
     let last = 0, m;
     while ((m = re.exec(text)) !== null) {
       if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
       const w    = m[1].toLowerCase();
-      const c    = getColor(w);
       const mark = document.createElement('mark');
       mark.dataset.wlWord = w;
-      mark.style.cssText  = [
-        'background:transparent',
-        `color:${c}`,
-        `text-shadow:0 0 8px ${c}aa, 0 0 2px ${c}`,
-        `border-bottom:1.5px solid ${c}`,
-        'padding-bottom:1px',
-        'border-radius:1px',
-        'transition:text-shadow .3s',
-      ].join(';');
-      mark.textContent = m[1];
+      mark.style.color    = getColor(w);  // drives currentColor in the CSS keyframes
+      mark.textContent    = m[1];
       frag.appendChild(mark);
       last = re.lastIndex;
     }
@@ -93,176 +100,8 @@
     el.appendChild(frag);
   }
 
-  // ── SVG helpers ───────────────────────────────────────────────────────────
-  const NS = 'http://www.w3.org/2000/svg';
-  function svgEl(tag, attrs) {
-    const e = document.createElementNS(NS, tag);
-    Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, v));
-    return e;
-  }
-
-  // Build (or reuse) a per-color glow filter inside the SVG <defs>
-  function ensureGlowFilter(svg, c) {
-    const id = `wl-glow-${c.replace('#', '')}`;
-    if (svg.querySelector(`#${id}`)) return id;
-    let defs = svg.querySelector('defs');
-    if (!defs) { defs = document.createElementNS(NS, 'defs'); svg.insertBefore(defs, svg.firstChild); }
-    const filter = document.createElementNS(NS, 'filter');
-    filter.setAttribute('id', id);
-    filter.setAttribute('x', '-80%'); filter.setAttribute('y', '-80%');
-    filter.setAttribute('width', '260%'); filter.setAttribute('height', '260%');
-    // Coloured blur
-    const blur = document.createElementNS(NS, 'feGaussianBlur');
-    blur.setAttribute('in', 'SourceGraphic'); blur.setAttribute('stdDeviation', '4'); blur.setAttribute('result', 'blur');
-    // White core blur
-    const blur2 = document.createElementNS(NS, 'feGaussianBlur');
-    blur2.setAttribute('in', 'SourceGraphic'); blur2.setAttribute('stdDeviation', '1.5'); blur2.setAttribute('result', 'coreBlur');
-    const merge = document.createElementNS(NS, 'feMerge');
-    ['blur', 'coreBlur', 'SourceGraphic'].forEach(n => {
-      const mn = document.createElementNS(NS, 'feMergeNode'); mn.setAttribute('in', n); merge.appendChild(mn);
-    });
-    filter.appendChild(blur); filter.appendChild(blur2); filter.appendChild(merge);
-    defs.appendChild(filter);
-    return id;
-  }
-
-  // Thumbtack pin at (cx, cy)
-  function drawPin(svg, cx, cy, c) {
-    svg.appendChild(svgEl('circle', { cx, cy, r: 8,  fill: 'rgba(0,0,0,0.45)' }));
-    svg.appendChild(svgEl('circle', { cx, cy, r: 7,  fill: c, 'fill-opacity': '0.18',
-      stroke: c, 'stroke-width': '1.5', 'stroke-opacity': '0.85' }));
-    svg.appendChild(svgEl('circle', { cx, cy, r: 4,  fill: c, 'fill-opacity': '0.9',
-      filter: `drop-shadow(0 0 4px ${c})` }));
-    svg.appendChild(svgEl('circle', { cx, cy, r: 1.5, fill: '#fff', 'fill-opacity': '0.9' }));
-  }
-
-  // Straight line with glow layers
-  function drawLine(svg, x1, y1, x2, y2, c) {
-    const filterId = ensureGlowFilter(svg, c);
-
-    // Wide outer glow — visible halo
-    const outer = svgEl('line', { x1, y1, x2, y2,
-      stroke: c, 'stroke-width': LINE_WIDTH * 9,
-      'stroke-opacity': '0.22', 'stroke-linecap': 'round',
-      filter: `url(#${filterId})` });
-    // Pulse the outer glow opacity
-    const pulse = document.createElementNS(NS, 'animate');
-    pulse.setAttribute('attributeName', 'stroke-opacity');
-    pulse.setAttribute('values', '0.22;0.45;0.22');
-    pulse.setAttribute('dur', '2.4s');
-    pulse.setAttribute('repeatCount', 'indefinite');
-    outer.appendChild(pulse);
-    svg.appendChild(outer);
-
-    // Mid bright glow
-    svg.appendChild(svgEl('line', { x1, y1, x2, y2,
-      stroke: c, 'stroke-width': LINE_WIDTH * 3,
-      'stroke-opacity': '0.55', 'stroke-linecap': 'round' }));
-
-    // Core dashed line — moving dash animation
-    const core = svgEl('line', { x1, y1, x2, y2,
-      stroke: '#fff', 'stroke-width': LINE_WIDTH,
-      'stroke-opacity': '0.9', 'stroke-linecap': 'round',
-      'stroke-dasharray': '6 5' });
-    const dashAnim = document.createElementNS(NS, 'animate');
-    dashAnim.setAttribute('attributeName', 'stroke-dashoffset');
-    dashAnim.setAttribute('from', '0'); dashAnim.setAttribute('to', '-22');
-    dashAnim.setAttribute('dur', '1.2s'); dashAnim.setAttribute('repeatCount', 'indefinite');
-    core.appendChild(dashAnim);
-    svg.appendChild(core);
-
-    return { x1, y1, x2, y2, c };
-  }
-
-  // Traveling dot: launches once, cleans up, then loops itself continuously
-  let dotGen = 0;
-  function clearDots() { dotGen++; }
-
-  function launchDot(svg, ld, gen) {
-    if (gen !== dotGen) return;                        // stale generation → stop
-    const fwd         = Math.random() > 0.4;
-    const { x1, y1, x2, y2, c } = ld;
-    const [sx, sy, ex, ey] = fwd ? [x1, y1, x2, y2] : [x2, y2, x1, y1];
-    const dur = DOT_DUR_MIN + Math.random() * (DOT_DUR_MAX - DOT_DUR_MIN);
-    const r   = 1.8 + Math.random() * 1.4;
-
-    const dot = svgEl('circle', {
-      r, cx: sx, cy: sy,
-      fill: '#fff', 'fill-opacity': '0',
-      filter: `drop-shadow(0 0 3px ${c}) drop-shadow(0 0 6px #fff)`,
-    });
-
-    const mkAnim = (attr, from, to) => {
-      const a = document.createElementNS(NS, 'animate');
-      a.setAttribute('attributeName', attr);
-      a.setAttribute('from', String(from));
-      a.setAttribute('to',   String(to));
-      a.setAttribute('dur',  `${dur.toFixed(2)}s`);
-      a.setAttribute('fill', 'freeze');
-      return a;
-    };
-    dot.appendChild(mkAnim('cx', sx, ex));
-    dot.appendChild(mkAnim('cy', sy, ey));
-
-    const fade = document.createElementNS(NS, 'animate');
-    fade.setAttribute('attributeName', 'fill-opacity');
-    fade.setAttribute('values', '0;0.9;0.9;0');
-    fade.setAttribute('keyTimes', '0;0.1;0.85;1');
-    fade.setAttribute('dur', `${dur.toFixed(2)}s`);
-    fade.setAttribute('fill', 'freeze');
-    dot.appendChild(fade);
-
-    svg.appendChild(dot);
-
-    setTimeout(() => {
-      try { svg.removeChild(dot); } catch {}
-      const pause = DOT_PAUSE_MIN + Math.random() * (DOT_PAUSE_MAX - DOT_PAUSE_MIN);
-      setTimeout(() => launchDot(svg, ld, gen), pause);
-    }, dur * 1000 + 60);
-  }
-
-  // ── main draw ─────────────────────────────────────────────────────────────
-  function drawLines(container, svg, sharedWords) {
-    svg.style.height = container.scrollHeight + 'px';
-
-    const cRect  = container.getBoundingClientRect();
-    const scrollT = container.scrollTop;
-    const lines   = [];
-
-    sharedWords.forEach(word => {
-      const marks = [...container.querySelectorAll(`mark[data-wl-word="${word}"]`)];
-      if (marks.length < 2) return;
-      const c = getColor(word);
-
-      for (let i = 0; i < marks.length - 1; i++) {
-        const rA = marks[i].getBoundingClientRect();
-        const rB = marks[i + 1].getBoundingClientRect();
-        const x1 = Math.round(rA.right - cRect.left);
-        const y1 = Math.round(rA.top   - cRect.top + scrollT + rA.height / 2);
-        const x2 = Math.round(rB.left  - cRect.left);
-        const y2 = Math.round(rB.top   - cRect.top + scrollT + rB.height / 2);
-        if (Math.abs(y2 - y1) < 6 && Math.abs(x2 - x1) < 6) continue;
-
-        const ld = drawLine(svg, x1, y1, x2, y2, c);
-        lines.push(ld);
-        drawPin(svg, x1, y1, c);
-        drawPin(svg, x2, y2, c);
-      }
-    });
-
-    // Continuous traveling dots per line — 2-3 staggered dots looping forever
-    const gen = dotGen;
-    lines.forEach(ld => {
-      const numDots = 2 + Math.floor(Math.random() * 2);
-      for (let k = 0; k < numDots; k++) {
-        const stagger = k * (700 + Math.random() * 500);
-        setTimeout(() => launchDot(svg, ld, gen), stagger);
-      }
-    });
-  }
-
   // ── update cycle ──────────────────────────────────────────────────────────
-  function update(container, svg) {
+  function update(container) {
     const els = readyTextEls(container);
     els.forEach(restoreEl);
 
@@ -275,8 +114,6 @@
     });
 
     const shared = Object.keys(wordMap).filter(w => wordMap[w].length >= 2);
-    svg.innerHTML = '';
-    clearDots();
     if (!shared.length) return;
 
     const elWords = new Map();
@@ -288,7 +125,6 @@
     });
 
     elWords.forEach((words, e) => highlightEl(e, words));
-    drawLines(container, svg, shared);
   }
 
   // ── init ──────────────────────────────────────────────────────────────────
@@ -296,27 +132,15 @@
     const container = document.getElementById('messages');
     if (!container) { setTimeout(init, 200); return; }
 
-    const svg = document.createElementNS(NS, 'svg');
-    svg.id = 'word-link-svg';
-    svg.style.cssText = [
-      'position:absolute', 'top:0', 'left:0',
-      'width:100%', 'height:100%',
-      'pointer-events:none', 'z-index:5', 'overflow:visible',
-    ].join(';');
-    container.appendChild(svg);
-
-    // Guard: when update() mutates the DOM (highlightEl), MutationObserver fires
-    // schedule() again. Use `updating` to suppress re-entry during our own DOM
-    // changes, and a short debounce so rapid class-changes (e.g. ai-done) coalesce.
     let updateTimer = null;
-    let updating = false;
+    let updating    = false;
 
     function schedule() {
-      if (updating) return;  // DOM mutations from our own update — ignore
+      if (updating) return;
       clearTimeout(updateTimer);
       updateTimer = setTimeout(() => {
         updating = true;
-        try { update(container, svg); } catch (e) { console.error('[word-links]', e); }
+        try { update(container); } catch (e) { console.error('[word-links]', e); }
         updating = false;
       }, 60);
     }
@@ -325,8 +149,6 @@
       childList: true, subtree: true,
       attributes: true, attributeFilter: ['class'],
     });
-    if (window.ResizeObserver) new ResizeObserver(schedule).observe(container);
-    container.addEventListener('scroll', schedule, { passive: true });
   }
 
   if (document.readyState === 'loading') {
