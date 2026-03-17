@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GREENROOM RAG Sync</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0a0a0a;
+      --panel: #121212;
+      --border: #242424;
+      --text: #ececec;
+      --muted: #9a9a9a;
+      --accent: #43d27c;
+      --accent-2: #e05555;
+    }
+    body {
+      min-height: 100vh;
+      background: radial-gradient(circle at 10% 10%, #1a1a1a 0%, var(--bg) 45%);
+      color: var(--text);
+      font-family: 'IBM Plex Mono', monospace;
+      display: flex;
+      justify-content: center;
+      padding: 24px;
+    }
+    .wrap {
+      width: min(960px, 100%);
+      display: grid;
+      gap: 16px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      padding: 16px;
+    }
+    h1 { font-size: 18px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px; }
+    .hint { color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .row { display: grid; gap: 10px; margin-top: 12px; }
+    button {
+      width: 100%;
+      border: 1px solid var(--border);
+      background: #0d0d0d;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      padding: 10px;
+    }
+    button {
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      background: var(--accent);
+      color: #04110a;
+      border-color: #2aa85d;
+      font-weight: 600;
+    }
+    button.secondary {
+      background: transparent;
+      color: var(--text);
+    }
+    .status { color: var(--muted); font-size: 12px; min-height: 18px; }
+    .status.ok { color: var(--accent); }
+    .status.err { color: var(--accent-2); }
+    .docs { display: grid; gap: 8px; margin-top: 10px; }
+    .doc {
+      border: 1px solid var(--border);
+      padding: 10px;
+      font-size: 12px;
+      color: #cfcfcf;
+      display: grid;
+      gap: 4px;
+    }
+    .doc strong { color: var(--text); }
+    code {
+      color: #cfe8ff;
+      background: #101820;
+      padding: 2px 5px;
+    }
+    a { color: #8ad8ff; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <h1>Codespaces Knowledge Sync</h1>
+      <div class="hint">Keep writing files inside this Codespaces workspace only. Nothing is pasted into the browser. Add .txt or .md files under <code>.rag-docs/</code>, <code>writings/</code>, <code>knowledge/</code>, or <code>docs/</code>, then sync them into the RAG index.</div>
+      <div class="row">
+        <button id="sync">Sync Workspace Documents</button>
+        <div id="status" class="status"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h1>Indexed Documents</h1>
+      <div class="hint">This view shows only indexed filenames and metadata, not document content. The index is still in-memory for this running instance.</div>
+      <div class="row">
+        <button id="refresh" class="secondary">Refresh list</button>
+        <div id="docs" class="docs"></div>
+      </div>
+      <div class="hint">Then open <a href="/tv.html">tv.html</a> and ask questions from your indexed writing.</div>
+    </div>
+  </div>
+
+  <script>
+    const statusEl = document.getElementById('status');
+    const docsEl = document.getElementById('docs');
+
+    document.getElementById('sync').addEventListener('click', async () => {
+      setStatus('Scanning workspace folders and indexing files...', '');
+      try {
+        const res = await fetch('/api/rag-sync', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Sync failed');
+
+        setStatus(`Indexed ${data.indexedCount} workspace document(s).`, 'ok');
+        await refreshDocs();
+      } catch (err) {
+        setStatus(err.message, 'err');
+      }
+    });
+
+    document.getElementById('refresh').addEventListener('click', refreshDocs);
+
+    function setStatus(text, type) {
+      statusEl.textContent = text;
+      statusEl.className = `status ${type || ''}`.trim();
+    }
+
+    async function refreshDocs() {
+      docsEl.innerHTML = '';
+      try {
+        const res = await fetch('/api/rag-docs');
+        const data = await res.json();
+        const docs = data.documents || [];
+
+        if (!docs.length) {
+          docsEl.innerHTML = '<div class="doc">No documents indexed yet.</div>';
+          return;
+        }
+
+        docs.forEach(doc => {
+          const div = document.createElement('div');
+          div.className = 'doc';
+          div.innerHTML = `<strong>${doc.title}</strong><span>Path: ${doc.sourcePath || 'manual'}</span><span>Chunks: ${doc.chunkCount}</span>`;
+          docsEl.appendChild(div);
+        });
+      } catch {
+        docsEl.innerHTML = '<div class="doc">Could not load documents.</div>';
+      }
+    }
+
+    refreshDocs();
+  </script>
+</body>
+</html>

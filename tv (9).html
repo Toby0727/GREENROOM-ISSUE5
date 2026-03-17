@@ -298,10 +298,14 @@
     messages.scrollTop = messages.scrollHeight;
 
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch('/api/rag-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: chatHistory })
+        body: JSON.stringify({
+          message: userMsg.text,
+          history: chatHistory,
+          sessionId: 'tv-main'
+        })
       });
       const data = await res.json();
       const reply = data.reply || '...';
