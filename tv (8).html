@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TYPE HERE</title>
+<script src="/pusher.min.js"></script>
+<script src="/qrcode.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; background: #060606; overflow: hidden; font-family: 'IBM Plex Mono', monospace; }
+
+  .stage {
+    width: 100vw; height: 100vh;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding: 20px;
+    gap: 12px;
+  }
+
+  /* LEFT: VIDEO */
+  .video-panel {
+    position: relative;
+    background: #0a0a0a;
+    border: 1px solid #181818;
+    overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .upload-zone { display: flex; flex-direction: column; align-items: center; gap: 14px; color: #222; transition: color 0.3s; user-select: none; }
+  .video-panel:hover .upload-zone { color: #444; }
+  .upload-cross { width: 48px; height: 48px; position: relative; }
+  .upload-cross::before, .upload-cross::after { content: ''; position: absolute; background: currentColor; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+  .upload-cross::before { width: 1px; height: 100%; }
+  .upload-cross::after { width: 100%; height: 1px; }
+  .upload-label { font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: inherit; }
+  #video-el { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }
+  #file-input { display: none; }
+  .panel-tag { position: absolute; top: 12px; left: 12px; font-size: 8px; letter-spacing: 0.2em; color: #1e1e1e; text-transform: uppercase; z-index: 5; }
+
+  /* RIGHT: TERMINAL PANEL */
+  .doc-panel {
+    background: #0a0a0a;
+    border: 1px solid #181818;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* terminal top bar */
+  .term-bar {
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid #141414;
+    background: #0d0d0d;
+  }
+  .term-dots { display: flex; gap: 6px; }
+  .term-dot { width: 10px; height: 10px; border-radius: 50%; background: #1e1e1e; }
+  .term-title { font-size: 9px; letter-spacing: 0.18em; color: #2a2a2a; text-transform: uppercase; }
+  .term-right { display: flex; align-items: center; gap: 12px; }
+
+  .conn-badge { font-size: 8px; letter-spacing: 0.12em; color: #222; text-transform: uppercase; padding: 3px 8px; border: 1px solid #181818; }
+  .conn-badge.connected { color: #3a3a3a; border-color: #252525; }
+
+  /* QR */
+  .qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .qr-box { width: 64px; height: 64px; background: #ececec; padding: 4px; display: flex; align-items: center; justify-content: center; }
+  #qr-div { width: 56px; height: 56px; }
+  #qr-div img { width: 56px !important; height: 56px !important; }
+  .qr-label { font-size: 7px; letter-spacing: 0.14em; color: #222; text-transform: uppercase; }
+
+  /* MESSAGES */
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+    scrollbar-width: thin;
+    scrollbar-color: #1a1a1a transparent;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .messages::-webkit-scrollbar { width: 3px; }
+  .messages::-webkit-scrollbar-thumb { background: #1e1e1e; }
+
+  .msg-block { display: flex; flex-direction: column; gap: 5px; }
+
+  .msg-meta {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 9px; letter-spacing: 0.1em; color: #2a2a2a;
+  }
+  .msg-meta .user { color: #404040; }
+  .msg-meta .sep { color: #1e1e1e; }
+  .msg-meta .device { color: #2a2a2a; }
+  .msg-meta .time { color: #222; }
+
+  .msg-prompt { color: #2e2e2e; font-size: 11px; margin-right: 6px; }
+
+  .msg-text {
+    font-size: clamp(13px, 1.6vw, 20px);
+    line-height: 1.6;
+    color: #c8c8c8;
+    word-break: break-word;
+    white-space: pre-wrap;
+    padding-left: 16px;
+    border-left: 1px solid #1a1a1a;
+  }
+
+  .cursor {
+    display: inline-block; width: 0.5em; height: 1em;
+    background: #c8c8c8;
+    vertical-align: text-bottom;
+    animation: blink 1s step-end infinite;
+    margin-left: 2px;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  /* FOOTER */
+  .term-footer {
+    flex-shrink: 0;
+    padding: 8px 16px;
+    border-top: 1px solid #141414;
+    display: flex; align-items: center; justify-content: space-between;
+    background: #0d0d0d;
+  }
+  .footer-stat { font-size: 8px; letter-spacing: 0.14em; color: #1e1e1e; }
+  .footer-stat span { color: #2e2e2e; }
+
+  .empty-state {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 8px;
+  }
+  .empty-prompt { font-size: 11px; color: #1e1e1e; letter-spacing: 0.1em; }
+  .cursor-alone { display: inline-block; width: 8px; height: 16px; background: #1e1e1e; animation: blink 1s step-end infinite; vertical-align: middle; margin-left: 4px; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <!-- LEFT: VIDEO -->
+  <div class="video-panel" onclick="document.getElementById('file-input').click()">
+    <span class="panel-tag">— video</span>
+    <input type="file" id="file-input" accept="video/*">
+    <div class="upload-zone" id="upload-zone">
+      <div class="upload-cross"></div>
+      <span class="upload-label">click to upload</span>
+    </div>
+    <video id="video-el" autoplay loop muted playsinline></video>
+  </div>
+
+  <!-- RIGHT: TERMINAL -->
+  <div class="doc-panel">
+    <div class="term-bar">
+      <div class="term-dots">
+        <div class="term-dot"></div>
+        <div class="term-dot"></div>
+        <div class="term-dot"></div>
+      </div>
+      <span class="term-title">type here — live feed</span>
+      <div class="term-right">
+        <span class="conn-badge" id="conn-badge">connecting...</span>
+        <div class="qr-wrap">
+          <div class="qr-box"><div id="qr-div"></div></div>
+          <div class="qr-label">scan to join</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="messages" id="messages">
+      <div class="empty-state" id="empty-state">
+        <span class="empty-prompt">awaiting input<span class="cursor-alone"></span></span>
+      </div>
+    </div>
+
+    <div class="term-footer">
+      <span class="footer-stat">msgs <span id="msg-count">0</span></span>
+      <span class="footer-stat">chars <span id="char-count">0</span></span>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById('file-input').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    document.getElementById('video-el').src = URL.createObjectURL(file);
+    document.getElementById('video-el').style.display = 'block';
+    document.getElementById('upload-zone').style.display = 'none';
+  });
+
+  new QRCode(document.getElementById('qr-div'), {
+    text: 'https://greenroom-issue-5-8rz6.vercel.app/mobile.html',
+    width: 56, height: 56,
+    colorDark: '#0a0a0a', colorLight: '#ececec',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+
+  const pusher  = new Pusher('8e1cefae4252719fab23', { cluster: 'us2', forceTLS: true });
+  const channel = pusher.subscribe('livedoc');
+  const connBadge = document.getElementById('conn-badge');
+  const messages  = document.getElementById('messages');
+  const msgCount  = document.getElementById('msg-count');
+  const charCount = document.getElementById('char-count');
+  const emptyState = document.getElementById('empty-state');
+
+  pusher.connection.bind('connected', () => { connBadge.textContent = 'connected'; connBadge.classList.add('connected'); });
+  pusher.connection.bind('disconnected', () => { connBadge.textContent = 'disconnected'; connBadge.classList.remove('connected'); });
+
+  let allMessages = [];
+  let timers = {};
+
+  channel.bind('message', data => {
+    addMessage(data);
+  });
+
+  channel.bind('clear', () => {
+    allMessages = [];
+    Object.values(timers).forEach(clearInterval);
+    timers = {};
+    messages.innerHTML = '';
+    messages.appendChild(emptyState);
+    emptyState.style.display = 'flex';
+    msgCount.textContent = '0';
+    charCount.textContent = '0';
+  });
+
+  channel.bind('requestSync', () => {
+    if (allMessages.length > 0) {
+      fetch('/api/pusher', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event: 'syncAll', data: { messages: allMessages } })
+      });
+    }
+  });
+
+  channel.bind('syncAll', data => {
+    if (!data.messages || allMessages.length > 0) return;
+    data.messages.forEach(m => addMessage(m, true));
+  });
+
+  function addMessage(data, isSynced) {
+    if (!isSynced) allMessages.push(data);
+    emptyState.style.display = 'none';
+
+    const block = document.createElement('div');
+    block.className = 'msg-block';
+    block.dataset.id = data.id;
+
+    const meta = document.createElement('div');
+    meta.className = 'msg-meta';
+
+    const elapsed = isSynced ? Math.floor((Date.now() - data.ts) / 1000) : 0;
+    meta.innerHTML = `<span class="user">${data.user}</span><span class="sep">/</span><span class="device">${data.device}</span><span class="sep">/</span><span class="time" data-ts="${data.ts}">${formatTime(elapsed)}</span>`;
+
+    const textEl = document.createElement('div');
+    textEl.className = 'msg-text';
+
+    const fontMap = {
+      'mono': "'IBM Plex Mono', monospace",
+      'serif': "'Times New Roman', Times, serif",
+      'helvetica': "Helvetica, Arial, sans-serif",
+      'courier': "'Courier New', Courier, monospace",
+      'georgia': "Georgia, serif",
+      'garamond': "Garamond, 'Times New Roman', serif"
+    };
+    textEl.style.fontFamily = fontMap[data.font] || fontMap['mono'];
+    textEl.textContent = data.text;
+
+    block.appendChild(meta);
+    block.appendChild(textEl);
+    messages.appendChild(block);
+    messages.scrollTop = messages.scrollHeight;
+
+    // live time update
+    timers[data.id] = setInterval(() => {
+      const timeEl = block.querySelector('[data-ts]');
+      if (timeEl) {
+        const secs = Math.floor((Date.now() - data.ts) / 1000);
+        timeEl.textContent = formatTime(secs);
+      }
+    }, 10000);
+
+    updateStats();
+  }
+
+  function formatTime(secs) {
+    if (secs < 60) return `${secs}s ago`;
+    if (secs < 3600) return `${Math.floor(secs/60)}m ago`;
+    return `${Math.floor(secs/3600)}h ago`;
+  }
+
+  function updateStats() {
+    msgCount.textContent = allMessages.length;
+    charCount.textContent = allMessages.reduce((sum, m) => sum + m.text.length, 0);
+  }
+</script>
+</body>
+</html>
