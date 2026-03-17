@@ -1,16 +1,23 @@
 import { promises as fs } from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 const OPENAI_BASE_URL = 'https://api.openai.com/v1';
 const CHAT_MODEL = 'gpt-4o-mini';
 const EMBEDDING_MODEL = 'text-embedding-3-small';
 const DB_KEY = '__greenroom_rag_db__';
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT_FROM_MODULE = path.resolve(MODULE_DIR, '..');
 const WORKSPACE_ROOT = process.cwd();
 const WORKSPACE_DOC_DIRS = ['.rag-docs', 'writings', 'knowledge', 'docs'];
-const PRELOAD_DOC_CANDIDATES = ['.rag-docs/green room.txt', '.rag-docs/greenroom.txt'];
+const PRELOAD_DOC_CANDIDATES = ['.rag-docs/green room.txt'];
 const TEXT_FILE_EXTENSIONS = new Set(['.txt', '.md', '.markdown', '.text']);
 const LOCAL_EMBEDDING_DIMS = 256;
 let preloadPromise = null;
+
+function getSearchRoots() {
+  return [...new Set([WORKSPACE_ROOT, PROJECT_ROOT_FROM_MODULE])].filter(Boolean);
+}
 
 function getDb() {
   if (!globalThis[DB_KEY]) {
@@ -342,22 +349,29 @@ async function walkDirectory(dirPath) {
 
 async function readWorkspaceDocumentFiles() {
   const sources = [];
+  const seenPaths = new Set();
+  const searchRoots = getSearchRoots();
 
-  for (const dirName of WORKSPACE_DOC_DIRS) {
-    const absDir = path.join(WORKSPACE_ROOT, dirName);
-    if (!await pathExists(absDir)) continue;
+  for (const root of searchRoots) {
+    for (const dirName of WORKSPACE_DOC_DIRS) {
+      const absDir = path.join(root, dirName);
+      if (!await pathExists(absDir)) continue;
 
-    const files = await walkDirectory(absDir);
-    for (const filePath of files) {
-      const content = await fs.readFile(filePath, 'utf8');
-      const relativePath = path.relative(WORKSPACE_ROOT, filePath);
-      if (!String(content).trim()) continue;
+      const files = await walkDirectory(absDir);
+      for (const filePath of files) {
+        if (seenPaths.has(filePath)) continue;
+        seenPaths.add(filePath);
 
-      sources.push({
-        title: path.basename(filePath),
-        content,
-        sourcePath: relativePath
-      });
+        const content = await fs.readFile(filePath, 'utf8');
+        const relativePath = path.relative(root, filePath);
+        if (!String(content).trim()) continue;
+
+        sources.push({
+          title: path.basename(filePath),
+          content,
+          sourcePath: relativePath
+        });
+      }
     }
   }
 
@@ -366,20 +380,27 @@ async function readWorkspaceDocumentFiles() {
 
 async function listWorkspaceSourceFiles() {
   const sources = [];
+  const seenPaths = new Set();
+  const searchRoots = getSearchRoots();
 
-  for (const dirName of WORKSPACE_DOC_DIRS) {
-    const absDir = path.join(WORKSPACE_ROOT, dirName);
-    if (!await pathExists(absDir)) continue;
+  for (const root of searchRoots) {
+    for (const dirName of WORKSPACE_DOC_DIRS) {
+      const absDir = path.join(root, dirName);
+      if (!await pathExists(absDir)) continue;
 
-    const files = await walkDirectory(absDir);
-    for (const filePath of files) {
-      const stats = await fs.stat(filePath);
-      const relativePath = path.relative(WORKSPACE_ROOT, filePath);
-      sources.push({
-        title: path.basename(filePath),
-        sourcePath: relativePath,
-        size: stats.size
-      });
+      const files = await walkDirectory(absDir);
+      for (const filePath of files) {
+        if (seenPaths.has(filePath)) continue;
+        seenPaths.add(filePath);
+
+        const stats = await fs.stat(filePath);
+        const relativePath = path.relative(root, filePath);
+        sources.push({
+          title: path.basename(filePath),
+          sourcePath: relativePath,
+          size: stats.size
+        });
+      }
     }
   }
 
@@ -388,16 +409,23 @@ async function listWorkspaceSourceFiles() {
 
 async function getWorkspaceSignature() {
   const parts = [];
+  const seenPaths = new Set();
+  const searchRoots = getSearchRoots();
 
-  for (const dirName of WORKSPACE_DOC_DIRS) {
-    const absDir = path.join(WORKSPACE_ROOT, dirName);
-    if (!await pathExists(absDir)) continue;
+  for (const root of searchRoots) {
+    for (const dirName of WORKSPACE_DOC_DIRS) {
+      const absDir = path.join(root, dirName);
+      if (!await pathExists(absDir)) continue;
 
-    const files = await walkDirectory(absDir);
-    for (const filePath of files) {
-      const stats = await fs.stat(filePath);
-      const relativePath = path.relative(WORKSPACE_ROOT, filePath);
-      parts.push(`${relativePath}:${stats.size}:${stats.mtimeMs}`);
+      const files = await walkDirectory(absDir);
+      for (const filePath of files) {
+        if (seenPaths.has(filePath)) continue;
+        seenPaths.add(filePath);
+
+        const stats = await fs.stat(filePath);
+        const relativePath = path.relative(root, filePath);
+        parts.push(`${relativePath}:${stats.size}:${stats.mtimeMs}`);
+      }
     }
   }
 
@@ -406,19 +434,25 @@ async function getWorkspaceSignature() {
 
 async function resolvePreloadSources() {
   const sources = [];
+  const seenPaths = new Set();
+  const searchRoots = getSearchRoots();
 
-  for (const relPath of PRELOAD_DOC_CANDIDATES) {
-    const absPath = path.join(WORKSPACE_ROOT, relPath);
-    if (!await pathExists(absPath)) continue;
+  for (const root of searchRoots) {
+    for (const relPath of PRELOAD_DOC_CANDIDATES) {
+      const absPath = path.join(root, relPath);
+      if (!await pathExists(absPath)) continue;
+      if (seenPaths.has(absPath)) continue;
+      seenPaths.add(absPath);
 
-    const content = await fs.readFile(absPath, 'utf8');
-    if (!String(content).trim()) continue;
+      const content = await fs.readFile(absPath, 'utf8');
+      if (!String(content).trim()) continue;
 
-    sources.push({
-      title: path.basename(absPath),
-      content,
-      sourcePath: relPath
-    });
+      sources.push({
+        title: path.basename(absPath),
+        content,
+        sourcePath: relPath
+      });
+    }
   }
 
   return sources;
@@ -518,6 +552,7 @@ export async function inspectWorkspaceState() {
   const sourceFiles = await listWorkspaceSourceFiles();
   return {
     apiKeyPresent: Boolean(process.env.OPENAI_API_KEY),
+    searchRoots: getSearchRoots(),
     sourceFiles
   };
 }
