@@ -1,22 +1,18 @@
 import { promises as fs } from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
 const OPENAI_BASE_URL = 'https://api.openai.com/v1';
 const CHAT_MODEL = 'gpt-4o-mini';
 const EMBEDDING_MODEL = 'text-embedding-3-small';
 const DB_KEY = '__greenroom_rag_db__';
-const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT_FROM_MODULE = path.resolve(MODULE_DIR, '..');
 const WORKSPACE_ROOT = process.cwd();
 const WORKSPACE_DOC_DIRS = ['.rag-docs', 'writings', 'knowledge', 'docs'];
 const PRELOAD_DOC_CANDIDATES = ['.rag-docs/green room.txt'];
 const TEXT_FILE_EXTENSIONS = new Set(['.txt', '.md', '.markdown', '.text']);
 const LOCAL_EMBEDDING_DIMS = 256;
-let preloadPromise = null;
 
 function getSearchRoots() {
-  return [...new Set([WORKSPACE_ROOT, PROJECT_ROOT_FROM_MODULE])].filter(Boolean);
+  return [WORKSPACE_ROOT];
 }
 
 function getDb() {
@@ -605,12 +601,6 @@ export async function ensureWorkspaceDocumentsIndexed() {
   return db.documents;
 }
 
-function preloadInBackground() {
-  if (preloadPromise) return preloadPromise;
-  preloadPromise = ensureWorkspaceDocumentsIndexed().catch(() => []);
-  return preloadPromise;
-}
-
 export async function listDocuments() {
   await ensureWorkspaceDocumentsIndexed();
   const db = getDb();
@@ -716,5 +706,3 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
     citations
   };
 }
-
-preloadInBackground();
