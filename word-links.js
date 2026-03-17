@@ -101,6 +101,31 @@
     return e;
   }
 
+  // Build (or reuse) a per-color glow filter inside the SVG <defs>
+  function ensureGlowFilter(svg, c) {
+    const id = `wl-glow-${c.replace('#', '')}`;
+    if (svg.querySelector(`#${id}`)) return id;
+    let defs = svg.querySelector('defs');
+    if (!defs) { defs = document.createElementNS(NS, 'defs'); svg.insertBefore(defs, svg.firstChild); }
+    const filter = document.createElementNS(NS, 'filter');
+    filter.setAttribute('id', id);
+    filter.setAttribute('x', '-80%'); filter.setAttribute('y', '-80%');
+    filter.setAttribute('width', '260%'); filter.setAttribute('height', '260%');
+    // Coloured blur
+    const blur = document.createElementNS(NS, 'feGaussianBlur');
+    blur.setAttribute('in', 'SourceGraphic'); blur.setAttribute('stdDeviation', '4'); blur.setAttribute('result', 'blur');
+    // White core blur
+    const blur2 = document.createElementNS(NS, 'feGaussianBlur');
+    blur2.setAttribute('in', 'SourceGraphic'); blur2.setAttribute('stdDeviation', '1.5'); blur2.setAttribute('result', 'coreBlur');
+    const merge = document.createElementNS(NS, 'feMerge');
+    ['blur', 'coreBlur', 'SourceGraphic'].forEach(n => {
+      const mn = document.createElementNS(NS, 'feMergeNode'); mn.setAttribute('in', n); merge.appendChild(mn);
+    });
+    filter.appendChild(blur); filter.appendChild(blur2); filter.appendChild(merge);
+    defs.appendChild(filter);
+    return id;
+  }
+
   // Thumbtack pin at (cx, cy)
   function drawPin(svg, cx, cy, c) {
     svg.appendChild(svgEl('circle', { cx, cy, r: 8,  fill: 'rgba(0,0,0,0.45)' }));
@@ -113,25 +138,39 @@
 
   // Straight line with glow layers
   function drawLine(svg, x1, y1, x2, y2, c) {
-    // Outer diffuse glow
+    const filterId = ensureGlowFilter(svg, c);
+
+    // Wide outer glow — visible halo
+    const outer = svgEl('line', { x1, y1, x2, y2,
+      stroke: c, 'stroke-width': LINE_WIDTH * 9,
+      'stroke-opacity': '0.22', 'stroke-linecap': 'round',
+      filter: `url(#${filterId})` });
+    // Pulse the outer glow opacity
+    const pulse = document.createElementNS(NS, 'animate');
+    pulse.setAttribute('attributeName', 'stroke-opacity');
+    pulse.setAttribute('values', '0.22;0.45;0.22');
+    pulse.setAttribute('dur', '2.4s');
+    pulse.setAttribute('repeatCount', 'indefinite');
+    outer.appendChild(pulse);
+    svg.appendChild(outer);
+
+    // Mid bright glow
     svg.appendChild(svgEl('line', { x1, y1, x2, y2,
-      stroke: c, 'stroke-width': LINE_WIDTH * 5,
-      'stroke-opacity': '0.07', 'stroke-linecap': 'round' }));
-    // Mid glow
-    svg.appendChild(svgEl('line', { x1, y1, x2, y2,
-      stroke: c, 'stroke-width': LINE_WIDTH * 2.5,
-      'stroke-opacity': '0.18', 'stroke-linecap': 'round' }));
-    // Core dashed line
+      stroke: c, 'stroke-width': LINE_WIDTH * 3,
+      'stroke-opacity': '0.55', 'stroke-linecap': 'round' }));
+
+    // Core dashed line — moving dash animation
     const core = svgEl('line', { x1, y1, x2, y2,
-      stroke: c, 'stroke-width': LINE_WIDTH,
-      'stroke-opacity': '0.75', 'stroke-linecap': 'round',
-      'stroke-dasharray': '5 4' });
-    const anim = document.createElementNS(NS, 'animate');
-    anim.setAttribute('attributeName', 'stroke-dashoffset');
-    anim.setAttribute('from', '0'); anim.setAttribute('to', '-18');
-    anim.setAttribute('dur', '1.6s'); anim.setAttribute('repeatCount', 'indefinite');
-    core.appendChild(anim);
+      stroke: '#fff', 'stroke-width': LINE_WIDTH,
+      'stroke-opacity': '0.9', 'stroke-linecap': 'round',
+      'stroke-dasharray': '6 5' });
+    const dashAnim = document.createElementNS(NS, 'animate');
+    dashAnim.setAttribute('attributeName', 'stroke-dashoffset');
+    dashAnim.setAttribute('from', '0'); dashAnim.setAttribute('to', '-22');
+    dashAnim.setAttribute('dur', '1.2s'); dashAnim.setAttribute('repeatCount', 'indefinite');
+    core.appendChild(dashAnim);
     svg.appendChild(core);
+
     return { x1, y1, x2, y2, c };
   }
 
