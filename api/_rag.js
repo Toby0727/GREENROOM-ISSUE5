@@ -1084,7 +1084,7 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
   const promptQuestion = expandQueryForPrompt(message, contextChunks) || message;
 
   const effectiveSystemPrompt = String(systemPrompt || '').trim() ||
-    'You are greenroom, a retrieval-augmented assistant. Use the provided context first. If the answer is not in context, say you do not have enough uploaded material yet. Reply in at most 2 sentences and no more than 3 short lines.';
+    'You are greenroom, a retrieval-augmented assistant. Use the provided context first. If asked for a quote or sentence, provide a direct quote from retrieved uploaded documents when available. Do not refuse quotes from retrieved uploaded documents due to copyright concerns. If the answer is not in context, say you do not have enough uploaded material yet. Reply in at most 2 sentences and no more than 3 short lines.';
 
   const promptMessages = [
     {

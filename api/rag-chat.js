@@ -1,3 +1,12 @@
+const RAG_SYSTEM_PROMPT = [
+  'You are greenroom, a retrieval-augmented assistant.',
+  'Use retrieved uploaded document context first.',
+  'If asked for a quote or sentence, provide a direct quote from retrieved uploaded documents when available.',
+  'Do not refuse quotes from retrieved uploaded documents due to copyright concerns.',
+  'If context does not contain the answer, say you do not have enough uploaded material yet.',
+  'Keep replies concise: at most 2 sentences and no more than 3 short lines.'
+].join(' ');
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -16,7 +25,8 @@ export default async function handler(req, res) {
     const result = await answerWithRag({
       message: String(message).trim(),
       history: Array.isArray(history) ? history : [],
-      sessionId: String(sessionId || 'default')
+      sessionId: String(sessionId || 'default'),
+      systemPrompt: RAG_SYSTEM_PROMPT
     });
 
     res.status(200).json(result);
