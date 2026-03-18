@@ -957,7 +957,7 @@ async function generateHypotheticalAnswer(question) {
   }
 }
 
-export async function answerWithRag({ message, history = [], sessionId = 'default' }) {
+export async function answerWithRag({ message, history = [], sessionId = 'default', systemPrompt = '' }) {
   await ensureWorkspaceDocumentsIndexed();
 
   const db = getDb();
@@ -1083,10 +1083,13 @@ export async function answerWithRag({ message, history = [], sessionId = 'defaul
   // expand it into a real question so the model understands intent.
   const promptQuestion = expandQueryForPrompt(message, contextChunks) || message;
 
+  const effectiveSystemPrompt = String(systemPrompt || '').trim() ||
+    'You are greenroom, a retrieval-augmented assistant. Use the provided context first. If the answer is not in context, say you do not have enough uploaded material yet. Reply in at most 2 sentences and no more than 3 short lines.';
+
   const promptMessages = [
     {
       role: 'system',
-      content: 'You are greenroom, a retrieval-augmented assistant. Use the provided context first. If the answer is not in context, say you do not have enough uploaded material yet. Reply in at most 2 sentences and no more than 3 short lines.'
+      content: effectiveSystemPrompt
     },
     {
       role: 'system',
