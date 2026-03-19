@@ -7,6 +7,7 @@ const STORE_DIR_CANDIDATES = [
 ];
 
 const STORE_FILE_NAME = 'greenroom-comments.json';
+const KV_HASH_KEY = 'greenroom:comments';
 
 function isCommentRecord(record) {
   return Boolean(
@@ -33,6 +34,78 @@ function normalizeComment(record) {
     fontSize: String(record.fontSize || 'md'),
     ts: Number(record.ts)
   };
+}
+
+function canUseKv() {
+  return Boolean(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+}
+
+async function kvRequest(command, ...args) {
+  const baseUrl = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+
+  if (!baseUrl || !token) {
+    throw new Error('Vercel KV is not configured');
+  }
+
+  const response = await fetch(`${baseUrl}/${[command, ...args].map(part => encodeURIComponent(String(part))).join('/')}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.error) {
+    throw new Error(payload.error || `KV ${command} request failed`);
+  }
+
+  return payload.result;
+}
+
+async function readCommentsFromKv() {
+  const result = await kvRequest('hgetall', KV_HASH_KEY);
+  if (!Array.isArray(result) || result.length === 0) return [];
+
+  const comments = [];
+  for (let index = 1; index < result.length; index += 2) {
+    try {
+      const parsed = JSON.parse(result[index]);
+      const normalized = normalizeComment(parsed);
+      if (normalized) comments.push(normalized);
+    } catch {}
+  }
+
+  return comments.sort((left, right) => left.ts - right.ts);
+}
+
+async function writeCommentsToKv(comments) {
+  const normalized = Array.isArray(comments)
+    ? comments.map(normalizeComment).filter(Boolean).sort((left, right) => left.ts - right.ts)
+    : [];
+
+  await kvRequest('del', KV_HASH_KEY);
+
+  for (const comment of normalized) {
+    await kvRequest('hset', KV_HASH_KEY, comment.id, JSON.stringify(comment));
+  }
+
+  return normalized;
+}
+
+async function appendCommentToKv(comment) {
+  const normalized = normalizeComment(comment);
+  if (!normalized) {
+    throw new Error('Invalid comment payload');
+  }
+
+  await kvRequest('hset', KV_HASH_KEY, normalized.id, JSON.stringify(normalized));
+  return readCommentsFromKv();
+}
+
+async function clearCommentsFromKv() {
+  await kvRequest('del', KV_HASH_KEY);
+  return [];
 }
 
 async function getReadableStorePath() {
@@ -65,6 +138,10 @@ async function getWritableStorePath() {
 }
 
 export async function readComments() {
+  if (canUseKv()) {
+    return readCommentsFromKv();
+  }
+
   const filePath = await getReadableStorePath();
 
   try {
@@ -82,6 +159,10 @@ export async function readComments() {
 }
 
 export async function writeComments(comments) {
+  if (canUseKv()) {
+    return writeCommentsToKv(comments);
+  }
+
   const filePath = await getWritableStorePath();
   const normalized = Array.isArray(comments)
     ? comments.map(normalizeComment).filter(Boolean).sort((left, right) => left.ts - right.ts)
@@ -92,6 +173,10 @@ export async function writeComments(comments) {
 }
 
 export async function appendComment(comment) {
+  if (canUseKv()) {
+    return appendCommentToKv(comment);
+  }
+
   const normalized = normalizeComment(comment);
   if (!normalized) {
     throw new Error('Invalid comment payload');
@@ -107,5 +192,9 @@ export async function appendComment(comment) {
 }
 
 export async function clearComments() {
+  if (canUseKv()) {
+    return clearCommentsFromKv();
+  }
+
   return writeComments([]);
 }

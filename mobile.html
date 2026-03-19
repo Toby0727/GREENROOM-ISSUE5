@@ -152,7 +152,6 @@
     <textarea id="msg-input" placeholder="leave a comment..." rows="2"></textarea>
     <div class="action-row">
       <button class="send-btn" id="send-btn" disabled>post comment</button>
-      <button class="clear-btn" id="clear-btn">clear all</button>
     </div>
   </div>
 </div>
@@ -182,7 +181,6 @@
   const pillLabel   = document.getElementById('pill-label');
   const msgInput    = document.getElementById('msg-input');
   const sendBtn     = document.getElementById('send-btn');
-  const clearBtn    = document.getElementById('clear-btn');
   const previewMsgs = document.getElementById('preview-msgs');
   const fontSelect  = document.getElementById('font-select');
   const fontSizeSelect = document.getElementById('font-size-select');
@@ -299,11 +297,6 @@
     addPreview(msg);
     msgInput.value = ''; autoResize();
     await publish('message', msg);
-  });
-
-  clearBtn.addEventListener('click', async () => {
-    previewList = []; renderPreview();
-    await publish('clear', {});
   });
 
   async function loadStoredComments() {
