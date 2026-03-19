@@ -168,10 +168,10 @@
   };
 
   const FONT_SIZES = {
-    'sm': { label: 'Small', css: '12px' },
-    'md': { label: 'Medium', css: '14px' },
-    'lg': { label: 'Large', css: '18px' },
-    'xl': { label: 'XL', css: '22px' }
+    'sm': { label: 'Small', css: '10px' },
+    'md': { label: 'Medium', css: '15px' },
+    'lg': { label: 'Large', css: '24px' },
+    'xl': { label: 'XL', css: '34px' }
   };
 
   const pusher  = new Pusher('8e1cefae4252719fab23', { cluster: 'us2', forceTLS: true });
@@ -251,6 +251,10 @@
       });
   }
 
+  function mergeComments(...commentGroups) {
+    return dedupeComments(commentGroups.flat());
+  }
+
   function renderPreview() {
     if (previewList.length === 0) {
       previewMsgs.innerHTML = '<span class="empty-hint">no messages yet</span>';
@@ -307,7 +311,9 @@
       const res = await fetch('/api/comments');
       if (!res.ok) throw new Error(`Request failed with ${res.status}`);
       const data = await res.json();
-      previewList = dedupeComments(data.comments);
+      const mergedComments = mergeComments(previewList, data.comments);
+      if (!mergedComments.length && previewList.length) return;
+      previewList = mergedComments;
       renderPreview();
     } catch {}
   }

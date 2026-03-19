@@ -221,10 +221,10 @@
   };
 
   const fontSizeMap = {
-    'sm': '14px',
-    'md': '18px',
-    'lg': '24px',
-    'xl': '30px'
+    'sm': '12px',
+    'md': '20px',
+    'lg': '34px',
+    'xl': '50px'
   };
 
   channel.bind('message', data => addComment(data));
@@ -326,13 +326,29 @@
     saveSession();
   }
 
+  function mergeComments(...commentGroups) {
+    const merged = [];
+    const seenIds = new Set();
+
+    commentGroups.flat().forEach(comment => {
+      if (!isCommentRecord(comment)) return;
+      if (seenIds.has(comment.id)) return;
+      seenIds.add(comment.id);
+      merged.push(comment);
+    });
+
+    return merged.sort((left, right) => left.ts - right.ts);
+  }
+
   async function loadStoredComments() {
     try {
       const res = await fetch('/api/comments');
       if (!res.ok) throw new Error(`Request failed with ${res.status}`);
       const data = await res.json();
       if (Array.isArray(data.comments)) {
-        hydrateComments(data.comments);
+        const mergedComments = mergeComments(allMessages, data.comments);
+        if (!mergedComments.length && allMessages.length) return;
+        hydrateComments(mergedComments);
       }
     } catch {}
   }
