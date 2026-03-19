@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-import { appendComment, clearComments } from './_comments.js';
+import { appendComment, clearComments, deleteComment } from './_comments.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -20,6 +20,8 @@ export default async function handler(req, res) {
       await appendComment(data);
     } else if (event === 'clear') {
       await clearComments();
+    } else if (event === 'delete') {
+      await deleteComment(data?.id);
     }
   } catch (err) {
     return res.status(400).json({ error: err.message || 'Failed to persist comment event' });

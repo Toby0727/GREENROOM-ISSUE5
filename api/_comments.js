@@ -108,6 +108,14 @@ async function clearCommentsFromKv() {
   return [];
 }
 
+async function deleteCommentFromKv(commentId) {
+  const id = String(commentId || '').trim();
+  if (!id) return readCommentsFromKv();
+
+  await kvRequest('hdel', KV_HASH_KEY, id);
+  return readCommentsFromKv();
+}
+
 async function getReadableStorePath() {
   const writablePath = await getWritableStorePath();
   const candidatePaths = [
@@ -197,4 +205,19 @@ export async function clearComments() {
   }
 
   return writeComments([]);
+}
+
+export async function deleteComment(commentId) {
+  const id = String(commentId || '').trim();
+  if (!id) {
+    throw new Error('comment id is required');
+  }
+
+  if (canUseKv()) {
+    return deleteCommentFromKv(id);
+  }
+
+  const comments = await readComments();
+  const nextComments = comments.filter(comment => comment.id !== id);
+  return writeComments(nextComments);
 }

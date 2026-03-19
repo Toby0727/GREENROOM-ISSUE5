@@ -220,6 +220,10 @@
 
   channel.bind('message', data => addPreview(data));
   channel.bind('clear', () => { previewList = []; renderPreview(); });
+  channel.bind('delete', data => {
+    if (!data || !data.id) return;
+    removePreviewById(data.id);
+  });
   channel.bind('syncAll', data => {
     if (!data.messages || previewList.length > 0) return;
     previewList = dedupeComments(data.messages);
@@ -251,6 +255,15 @@
 
   function mergeComments(...commentGroups) {
     return dedupeComments(commentGroups.flat());
+  }
+
+  function removePreviewById(commentId) {
+    const id = String(commentId || '').trim();
+    if (!id) return;
+    const nextPreview = previewList.filter(comment => comment.id !== id);
+    if (nextPreview.length === previewList.length) return;
+    previewList = nextPreview;
+    renderPreview();
   }
 
   function renderPreview() {

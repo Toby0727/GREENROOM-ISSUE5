@@ -98,10 +98,24 @@
     display: flex; align-items: center; gap: 6px;
     font-size: 9px; letter-spacing: 0.1em;
   }
+  .meta-main { display: flex; align-items: center; gap: 6px; }
   .msg-meta .user { color: #404040; }
   .msg-meta .sep  { color: #1e1e1e; }
   .msg-meta .device { color: #2a2a2a; }
   .msg-meta .time { color: #222; }
+  .msg-delete-btn {
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid #1f1f1f;
+    color: #2b2b2b;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 8px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    cursor: pointer;
+  }
+  .msg-delete-btn:hover { border-color: #3a3a3a; color: #4f4f4f; }
   .msg-text {
     font-size: clamp(12px, 1.5vw, 19px);
     line-height: 1.6; word-break: break-word; white-space: pre-wrap;
@@ -228,6 +242,10 @@
   };
 
   channel.bind('message', data => addComment(data));
+  channel.bind('delete', data => {
+    if (!data || !data.id) return;
+    removeCommentById(data.id, true);
+  });
 
   channel.bind('clear', () => {
     resetComments();
@@ -270,7 +288,23 @@
     const elapsed = isSynced ? Math.floor((Date.now() - data.ts) / 1000) : 0;
     const meta = document.createElement('div');
     meta.className = 'msg-meta';
-    meta.innerHTML = `<span class="user">${escHtml(data.user)}</span><span class="sep">/</span><span class="device">${escHtml(data.device)}</span><span class="sep">/</span><span class="time" data-ts="${data.ts}">${formatTime(elapsed)}</span>`;
+    const metaMain = document.createElement('div');
+    metaMain.className = 'meta-main';
+    metaMain.innerHTML = `<span class="user">${escHtml(data.user)}</span><span class="sep">/</span><span class="device">${escHtml(data.device)}</span><span class="sep">/</span><span class="time" data-ts="${data.ts}">${formatTime(elapsed)}</span>`;
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'msg-delete-btn';
+    deleteBtn.type = 'button';
+    deleteBtn.textContent = 'delete';
+    deleteBtn.addEventListener('click', async () => {
+      deleteBtn.disabled = true;
+      try {
+        await requestDeleteComment(data.id);
+      } catch {
+        deleteBtn.disabled = false;
+      }
+    });
+    meta.appendChild(metaMain);
+    meta.appendChild(deleteBtn);
 
     const textEl = document.createElement('div');
     textEl.className = 'msg-text';
@@ -301,6 +335,43 @@
   function updateStats() {
     msgCount.textContent = allMessages.length;
     deviceCount.textContent = String(new Set(allMessages.map(message => message.device)).size);
+  }
+
+  function removeCommentById(commentId, isSynced) {
+    const id = String(commentId || '').trim();
+    if (!id) return;
+
+    const nextMessages = allMessages.filter(message => message.id !== id);
+    if (nextMessages.length === allMessages.length) return;
+    allMessages = nextMessages;
+
+    const timer = timers[id];
+    if (timer) {
+      clearInterval(timer);
+      delete timers[id];
+    }
+
+    const block = Array.from(messages.querySelectorAll('.msg-block')).find(node => node.dataset.id === id);
+    if (block) block.remove();
+    renderedIds.delete(id);
+
+    if (!isSynced) saveSession();
+
+    if (allMessages.length === 0) {
+      messages.innerHTML = '';
+      messages.appendChild(emptyState);
+      emptyState.style.display = 'flex';
+    }
+
+    updateStats();
+  }
+
+  async function requestDeleteComment(commentId) {
+    await fetch('/api/pusher', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event: 'delete', data: { id: commentId } })
+    });
   }
 
   function resetComments() {
