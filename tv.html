@@ -49,9 +49,9 @@
   .conn-badge { font-size: 8px; letter-spacing: 0.12em; color: #222; text-transform: uppercase; padding: 3px 8px; border: 1px solid #181818; }
   .conn-badge.connected { color: #3a3a3a; border-color: #252525; }
   .qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-  .qr-box { width: 64px; height: 64px; background: #ececec; padding: 4px; display: flex; align-items: center; justify-content: center; }
-  #qr-div { width: 56px; height: 56px; }
-  #qr-div img { width: 56px !important; height: 56px !important; }
+  .qr-box { width: 112px; height: 112px; background: #ececec; padding: 6px; display: flex; align-items: center; justify-content: center; }
+  #qr-div { width: 100px; height: 100px; }
+  #qr-div img { width: 100px !important; height: 100px !important; }
   .qr-label { font-size: 7px; letter-spacing: 0.14em; color: #222; text-transform: uppercase; }
 
   /* COMMENTS */
@@ -85,13 +85,13 @@
   .msg-block.msg-new { animation: msg-arrive 0.28s cubic-bezier(.2,.8,.4,1) both; }
 
   /* Border flare on new comment */
-  @keyframes border-flare-red {
-    0%   { border-left-color: #7f1f1f; box-shadow: none; }
-    25%  { border-left-color: #ff5555; box-shadow: -3px 0 10px #ff333388; }
-    100% { border-left-color: #7f1f1f; box-shadow: none; }
+  @keyframes border-flare-green {
+    0%   { border-left-color: #1f7f4a; box-shadow: none; }
+    25%  { border-left-color: #43d27c; box-shadow: -3px 0 10px #43d27c66; }
+    100% { border-left-color: #1f7f4a; box-shadow: none; }
   }
   .msg-block.msg-new .msg-text {
-    animation: border-flare-red 1s ease 0.05s both;
+    animation: border-flare-green 1s ease 0.05s both;
   }
 
   .msg-meta {
@@ -105,8 +105,8 @@
   .msg-text {
     font-size: clamp(12px, 1.5vw, 19px);
     line-height: 1.6; word-break: break-word; white-space: pre-wrap;
-    padding-left: 14px; border-left: 1px solid #7f1f1f;
-    color: #e05555;
+    padding-left: 14px; border-left: 1px solid #1f7f4a;
+    color: #43d27c;
   }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
 
@@ -185,7 +185,7 @@
 
   new QRCode(document.getElementById('qr-div'), {
     text: mobileUrl,
-    width: 56, height: 56,
+    width: 100, height: 100,
     colorDark: '#0a0a0a', colorLight: '#ececec',
     correctLevel: QRCode.CorrectLevel.M
   });
@@ -218,6 +218,13 @@
     'courier':   "'Courier New', Courier, monospace",
     'georgia':   "Georgia, serif",
     'garamond':  "Garamond, 'Times New Roman', serif"
+  };
+
+  const fontSizeMap = {
+    'sm': '14px',
+    'md': '18px',
+    'lg': '24px',
+    'xl': '30px'
   };
 
   channel.bind('message', data => addComment(data));
@@ -268,6 +275,7 @@
     const textEl = document.createElement('div');
     textEl.className = 'msg-text';
     textEl.style.fontFamily = fontMap[data.font] || fontMap['mono'];
+    textEl.style.fontSize = fontSizeMap[data.fontSize] || fontSizeMap['md'];
     textEl.textContent = data.text;
 
     block.appendChild(meta);

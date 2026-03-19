@@ -16,6 +16,7 @@ function isCommentRecord(record) {
     typeof record.user === 'string' && record.user &&
     typeof record.device === 'string' && record.device &&
     typeof record.font === 'string' && record.font &&
+    typeof (record.fontSize || 'md') === 'string' &&
     Number.isFinite(Number(record.ts))
   );
 }
@@ -29,19 +30,26 @@ function normalizeComment(record) {
     user: String(record.user),
     device: String(record.device),
     font: String(record.font),
+    fontSize: String(record.fontSize || 'md'),
     ts: Number(record.ts)
   };
 }
 
 async function getReadableStorePath() {
-  for (const dirPath of STORE_DIR_CANDIDATES) {
-    const filePath = path.join(dirPath, STORE_FILE_NAME);
+  const writablePath = await getWritableStorePath();
+  const candidatePaths = [
+    writablePath,
+    ...STORE_DIR_CANDIDATES.map(dirPath => path.join(dirPath, STORE_FILE_NAME))
+  ].filter((filePath, index, paths) => paths.indexOf(filePath) === index);
+
+  for (const filePath of candidatePaths) {
     try {
       await fs.access(filePath);
       return filePath;
     } catch {}
   }
-  return path.join(STORE_DIR_CANDIDATES[0], STORE_FILE_NAME);
+
+  return writablePath;
 }
 
 async function getWritableStorePath() {

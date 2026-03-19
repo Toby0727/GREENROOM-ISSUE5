@@ -56,6 +56,7 @@
 
   /* USER CONFIG ROW */
   .config-row { display: flex; gap: 8px; align-items: center; }
+  .config-row.dual-selects { align-items: stretch; }
   .config-input {
     flex: 1; background: transparent; border: none; border-bottom: 1px solid #181818;
     color: #888; font-family: 'IBM Plex Mono', monospace; font-size: 11px;
@@ -89,21 +90,21 @@
   .action-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
 
   .send-btn {
-    flex: 1; background: #d8d8d8; border: none; color: #060606;
+    flex: 1; background: #ffffff; border: 1px solid #ffffff; color: #060606;
     font-family: 'IBM Plex Mono', monospace; font-size: 9px;
     letter-spacing: 0.2em; text-transform: uppercase; padding: 12px 0; cursor: pointer;
     transition: background 0.15s;
   }
   .send-btn:active { background: #aaa; }
-  .send-btn:disabled { background: #141414; color: #222; cursor: default; }
+  .send-btn:disabled { background: #ffffff; border-color: #ffffff; color: #7a7a7a; cursor: default; opacity: 0.72; }
 
   .clear-btn {
-    background: transparent; border: 1px solid #181818; color: #222;
+    background: #ffffff; border: 1px solid #ffffff; color: #060606;
     font-family: 'IBM Plex Mono', monospace; font-size: 9px;
     letter-spacing: 0.14em; text-transform: uppercase;
     padding: 12px 14px; cursor: pointer; white-space: nowrap;
   }
-  .clear-btn:active { color: #555; border-color: #333; }
+  .clear-btn:active { background: #d8d8d8; border-color: #d8d8d8; color: #060606; }
 
   /* font preview strip */
   .font-preview { font-size: 11px; color: #242424; padding: 4px 0; letter-spacing: 0.04em; min-height: 20px; }
@@ -130,6 +131,8 @@
   <div class="input-area">
     <div class="config-row">
       <input class="config-input" id="username-input" placeholder="your name" maxlength="20">
+    </div>
+    <div class="config-row dual-selects">
       <select class="font-select" id="font-select">
         <option value="mono">Mono</option>
         <option value="helvetica">Helvetica</option>
@@ -137,6 +140,12 @@
         <option value="courier">Courier</option>
         <option value="georgia">Georgia</option>
         <option value="garamond">Garamond</option>
+      </select>
+      <select class="font-select" id="font-size-select">
+        <option value="sm">Small</option>
+        <option value="md">Medium</option>
+        <option value="lg">Large</option>
+        <option value="xl">XL</option>
       </select>
     </div>
     <div class="font-preview" id="font-preview">The quick brown fox</div>
@@ -158,6 +167,13 @@
     'garamond':  { label: 'Garamond',      css: "Garamond, 'Times New Roman', serif" }
   };
 
+  const FONT_SIZES = {
+    'sm': { label: 'Small', css: '12px' },
+    'md': { label: 'Medium', css: '14px' },
+    'lg': { label: 'Large', css: '18px' },
+    'xl': { label: 'XL', css: '22px' }
+  };
+
   const pusher  = new Pusher('8e1cefae4252719fab23', { cluster: 'us2', forceTLS: true });
   const channel = pusher.subscribe('livedoc');
 
@@ -169,6 +185,7 @@
   const clearBtn    = document.getElementById('clear-btn');
   const previewMsgs = document.getElementById('preview-msgs');
   const fontSelect  = document.getElementById('font-select');
+  const fontSizeSelect = document.getElementById('font-size-select');
   const fontPreview = document.getElementById('font-preview');
   const usernameInput = document.getElementById('username-input');
 
@@ -180,12 +197,18 @@
   usernameInput.addEventListener('input', () => localStorage.setItem('th_username', usernameInput.value));
 
   fontSelect.value = localStorage.getItem('th_font') || fontSelect.value;
+  fontSizeSelect.value = localStorage.getItem('th_font_size') || fontSizeSelect.value;
   fontSelect.addEventListener('change', () => {
     localStorage.setItem('th_font', fontSelect.value);
     fontPreview.style.fontFamily = FONTS[fontSelect.value].css;
     fontPreview.textContent = `${FONTS[fontSelect.value].label} — Aa Bb Cc 123`;
   });
+  fontSizeSelect.addEventListener('change', () => {
+    localStorage.setItem('th_font_size', fontSizeSelect.value);
+    fontPreview.style.fontSize = FONT_SIZES[fontSizeSelect.value].css;
+  });
   fontSelect.dispatchEvent(new Event('change'));
+  fontSizeSelect.dispatchEvent(new Event('change'));
 
   pusher.connection.bind('connected', () => {
     connPill.classList.add('on'); pillDot.classList.add('on');
@@ -242,6 +265,7 @@
       const t = document.createElement('div');
       t.className = 'preview-text';
       t.style.fontFamily = FONTS[m.font]?.css || FONTS.mono.css;
+      t.style.fontSize = FONT_SIZES[m.fontSize]?.css || FONT_SIZES.md.css;
       t.textContent = m.text;
       div.appendChild(t);
       previewMsgs.appendChild(div);
@@ -265,6 +289,7 @@
       user: name,
       device: deviceName,
       font: fontSelect.value,
+      fontSize: fontSizeSelect.value,
       ts: Date.now()
     };
     addPreview(msg);
