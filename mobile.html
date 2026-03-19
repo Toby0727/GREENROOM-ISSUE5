@@ -114,7 +114,7 @@
   <div class="term-bar">
     <div class="term-left">
       <div class="term-title">type here</div>
-      <div class="term-sub">live terminal</div>
+      <div class="term-sub">mobile comment input</div>
     </div>
     <div class="conn-pill" id="conn-pill">
       <div class="pill-dot" id="pill-dot"></div>
@@ -123,7 +123,7 @@
   </div>
 
   <div class="preview" id="preview">
-    <div class="preview-label">— on screen now</div>
+    <div class="preview-label">— live on screen</div>
     <div id="preview-msgs"><span class="empty-hint">no messages yet</span></div>
   </div>
 
@@ -140,9 +140,9 @@
       </select>
     </div>
     <div class="font-preview" id="font-preview">The quick brown fox</div>
-    <textarea id="msg-input" placeholder="type something..." rows="2"></textarea>
+    <textarea id="msg-input" placeholder="leave a comment..." rows="2"></textarea>
     <div class="action-row">
-      <button class="send-btn" id="send-btn" disabled>send →</button>
+      <button class="send-btn" id="send-btn" disabled>post comment</button>
       <button class="clear-btn" id="clear-btn">clear all</button>
     </div>
   </div>
@@ -176,15 +176,16 @@
   let userCounter = Math.floor(Math.random() * 90) + 10;
   let deviceName  = detectDevice();
 
-  // persist username
   usernameInput.value = localStorage.getItem('th_username') || '';
   usernameInput.addEventListener('input', () => localStorage.setItem('th_username', usernameInput.value));
 
-  // font preview
+  fontSelect.value = localStorage.getItem('th_font') || fontSelect.value;
   fontSelect.addEventListener('change', () => {
+    localStorage.setItem('th_font', fontSelect.value);
     fontPreview.style.fontFamily = FONTS[fontSelect.value].css;
     fontPreview.textContent = `${FONTS[fontSelect.value].label} — Aa Bb Cc 123`;
   });
+  fontSelect.dispatchEvent(new Event('change'));
 
   pusher.connection.bind('connected', () => {
     connPill.classList.add('on'); pillDot.classList.add('on');
@@ -200,14 +201,31 @@
   channel.bind('clear', () => { previewList = []; renderPreview(); });
   channel.bind('syncAll', data => {
     if (!data.messages || previewList.length > 0) return;
-    previewList = data.messages;
+    previewList = dedupeComments(data.messages);
     renderPreview();
   });
-  channel.bind('requestSync', () => {}); // handled by tv (8).html
+  channel.bind('requestSync', () => {});
 
   function addPreview(data) {
+    if (!isCommentRecord(data)) return;
+    if (previewList.some(message => message.id === data.id)) return;
     previewList.push(data);
+    previewList.sort((left, right) => left.ts - right.ts);
     renderPreview();
+  }
+
+  function dedupeComments(comments) {
+    if (!Array.isArray(comments)) return [];
+
+    const seenIds = new Set();
+    return comments
+      .filter(isCommentRecord)
+      .sort((left, right) => left.ts - right.ts)
+      .filter(comment => {
+        if (seenIds.has(comment.id)) return false;
+        seenIds.add(comment.id);
+        return true;
+      });
   }
 
   function renderPreview() {
@@ -259,6 +277,16 @@
     await publish('clear', {});
   });
 
+  async function loadStoredComments() {
+    try {
+      const res = await fetch('/api/comments');
+      if (!res.ok) throw new Error(`Request failed with ${res.status}`);
+      const data = await res.json();
+      previewList = dedupeComments(data.comments);
+      renderPreview();
+    } catch {}
+  }
+
   msgInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBtn.click(); }
   });
@@ -292,6 +320,12 @@
     if (/Windows/.test(ua)) return 'Windows';
     return 'Browser';
   }
+
+  function isCommentRecord(record) {
+    return Boolean(record && record.id && typeof record.text === 'string' && record.user && record.device && record.font && record.ts);
+  }
+
+  loadStoredComments();
 </script>
 </body>
 </html>

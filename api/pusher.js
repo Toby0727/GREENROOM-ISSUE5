@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+import { appendComment, clearComments } from './_comments.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -13,6 +14,17 @@ export default async function handler(req, res) {
   const CLUSTER = 'us2';
 
   const { event, data } = req.body;
+
+  try {
+    if (event === 'message') {
+      await appendComment(data);
+    } else if (event === 'clear') {
+      await clearComments();
+    }
+  } catch (err) {
+    return res.status(400).json({ error: err.message || 'Failed to persist comment event' });
+  }
+
   const body = JSON.stringify({ name: event, channel: 'livedoc', data: JSON.stringify(data) });
   const bodyMd5 = crypto.createHash('md5').update(body).digest('hex');
   const timestamp = Math.floor(Date.now() / 1000);

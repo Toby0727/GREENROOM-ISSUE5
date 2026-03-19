@@ -6,7 +6,6 @@
 <title>TYPE HERE</title>
 <script src="/pusher.min.js"></script>
 <script src="/qrcode.min.js"></script>
-<script src="/word-links.js" defer></script>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -36,7 +35,7 @@
   #file-input { display: none; }
   .panel-tag { position: absolute; top: 12px; left: 12px; font-size: 8px; letter-spacing: 0.2em; color: #1e1e1e; text-transform: uppercase; z-index: 5; }
 
-  /* RIGHT: TERMINAL */
+  /* RIGHT: LIVE COMMENTS */
   .doc-panel { background: #0a0a0a; border: 1px solid #181818; display: flex; flex-direction: column; overflow: hidden; }
 
   .term-bar {
@@ -55,7 +54,7 @@
   #qr-div img { width: 56px !important; height: 56px !important; }
   .qr-label { font-size: 7px; letter-spacing: 0.14em; color: #222; text-transform: uppercase; }
 
-  /* MESSAGES */
+  /* COMMENTS */
   .messages {
     flex: 1; overflow-y: auto; padding: 16px 20px;
     scrollbar-width: thin; scrollbar-color: #1a1a1a transparent;
@@ -77,7 +76,7 @@
 
   .msg-block { display: flex; flex-direction: column; gap: 4px; }
 
-  /* Entry flash for all new message blocks */
+  /* Entry flash for all new comment blocks */
   @keyframes msg-arrive {
     0%   { opacity: 0; transform: translateX(-6px); }
     55%  { opacity: 1; transform: translateX(2px); }
@@ -85,13 +84,13 @@
   }
   .msg-block.msg-new { animation: msg-arrive 0.28s cubic-bezier(.2,.8,.4,1) both; }
 
-  /* Red border flare on new user message */
+  /* Border flare on new comment */
   @keyframes border-flare-red {
     0%   { border-left-color: #7f1f1f; box-shadow: none; }
     25%  { border-left-color: #ff5555; box-shadow: -3px 0 10px #ff333388; }
     100% { border-left-color: #7f1f1f; box-shadow: none; }
   }
-  .msg-block.msg-new .msg-text:not(.ai) {
+  .msg-block.msg-new .msg-text {
     animation: border-flare-red 1s ease 0.05s both;
   }
 
@@ -103,62 +102,11 @@
   .msg-meta .sep  { color: #1e1e1e; }
   .msg-meta .device { color: #2a2a2a; }
   .msg-meta .time { color: #222; }
-
-  /* AI label breathes between dim and bright */
-  @keyframes label-breathe {
-    0%,100% { color: #1f7f4a; text-shadow: none; }
-    50%     { color: #43d27c; text-shadow: 0 0 8px #43d27c55; }
-  }
-  .msg-meta .ai-label {
-    color: #1f7f4a; letter-spacing: 0.14em; font-size: 8px;
-    animation: label-breathe 4s ease-in-out infinite;
-  }
-
-  /* USER message — red */
   .msg-text {
     font-size: clamp(12px, 1.5vw, 19px);
     line-height: 1.6; word-break: break-word; white-space: pre-wrap;
     padding-left: 14px; border-left: 1px solid #7f1f1f;
     color: #e05555;
-  }
-
-  /* AI reply — green */
-  .msg-text.ai {
-    color: #43d27c;
-    border-left-color: #1f7f4a;
-  }
-
-  /* Phosphor glow on fully rendered AI text */
-  @keyframes phosphor-glow {
-    0%,100% { text-shadow: 0 0 3px #43d27c22; }
-    50%     { text-shadow: 0 0 10px #43d27c99, 0 0 2px #43d27ccc; }
-  }
-  @keyframes border-flare-green {
-    0%   { border-left-color: #1f7f4a; box-shadow: none; }
-    20%  { border-left-color: #43ffaa; box-shadow: -3px 0 12px #43ffaa66; }
-    100% { border-left-color: #1f7f4a; box-shadow: none; }
-  }
-  .msg-text.ai.ai-done {
-    animation: phosphor-glow 5s ease-in-out infinite, border-flare-green 1.2s ease both;
-  }
-
-  /* thinking indicator */
-  .thinking {
-    display: flex; align-items: center; gap: 6px;
-    padding-left: 14px; border-left: 1px solid #1f7f4a;
-  }
-  .think-dot {
-    width: 5px; height: 5px; border-radius: 50%; background: #2c9d5d;
-    animation: tpulse 1.2s ease-in-out infinite;
-  }
-  .think-dot:nth-child(2) { animation-delay: 0.2s; }
-  .think-dot:nth-child(3) { animation-delay: 0.4s; }
-  @keyframes tpulse { 0%,100%{opacity:0.2} 50%{opacity:1} }
-
-  .cursor {
-    display: inline-block; width: 0.5em; height: 1em;
-    background: #43d27c; vertical-align: text-bottom;
-    animation: blink 1s step-end infinite; margin-left: 2px;
   }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
 
@@ -174,12 +122,7 @@
   }
   .footer-stat { font-size: 8px; letter-spacing: 0.14em; color: #1e1e1e; }
   .footer-stat span { color: #2e2e2e; }
-  .footer-legend { display: flex; gap: 12px; }
-  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 8px; letter-spacing: 0.1em; }
-  .legend-dot { width: 6px; height: 6px; border-radius: 50%; }
-  .legend-dot.green { background: #43d27c; }
-  .legend-dot.red   { background: #e05555; }
-  .legend-label { color: #252525; }
+  .footer-copy { font-size: 8px; letter-spacing: 0.14em; color: #202020; text-transform: uppercase; }
 </style>
 </head>
 <body>
@@ -195,7 +138,7 @@
     <video id="video-el" autoplay loop muted playsinline></video>
   </div>
 
-  <!-- RIGHT: TERMINAL -->
+  <!-- RIGHT: LIVE COMMENTS -->
   <div class="doc-panel">
     <div class="term-bar">
       <div class="term-dots">
@@ -203,28 +146,28 @@
         <div class="term-dot"></div>
         <div class="term-dot"></div>
       </div>
-      <span class="term-title">type here — live feed</span>
+      <span class="term-title">type here — live comments</span>
       <div class="term-right">
         <span class="conn-badge" id="conn-badge">connecting...</span>
         <div class="qr-wrap">
           <div class="qr-box"><div id="qr-div"></div></div>
-          <div class="qr-label">scan to join</div>
+          <div class="qr-label">scan to comment</div>
         </div>
       </div>
     </div>
 
     <div class="messages" id="messages">
       <div class="empty-state" id="empty-state">
-        <span class="empty-prompt">awaiting input<span class="cursor-alone"></span></span>
+        <span class="empty-prompt">awaiting comments<span class="cursor-alone"></span></span>
       </div>
     </div>
 
     <div class="term-footer">
-      <div class="footer-legend">
-        <div class="legend-item"><div class="legend-dot red"></div><span class="legend-label">user</span></div>
-        <div class="legend-item"><div class="legend-dot green"></div><span class="legend-label">ai</span></div>
+      <span class="footer-copy">mobile input: name / font / comment</span>
+      <div>
+        <span class="footer-stat">comments <span id="msg-count">0</span></span>
+        <span class="footer-stat" style="margin-left: 14px;">devices <span id="device-count">0</span></span>
       </div>
-      <span class="footer-stat">msgs <span id="msg-count">0</span></span>
     </div>
   </div>
 </div>
@@ -238,8 +181,10 @@
     document.getElementById('upload-zone').style.display = 'none';
   });
 
+  const mobileUrl = new URL('mobile.html', window.location.href).toString();
+
   new QRCode(document.getElementById('qr-div'), {
-    text: 'https://greenroom-issue-5-8rz6.vercel.app/mobile.html',
+    text: mobileUrl,
     width: 56, height: 56,
     colorDark: '#0a0a0a', colorLight: '#ececec',
     correctLevel: QRCode.CorrectLevel.M
@@ -250,19 +195,19 @@
   const connBadge  = document.getElementById('conn-badge');
   const messages   = document.getElementById('messages');
   const msgCount   = document.getElementById('msg-count');
+  const deviceCount = document.getElementById('device-count');
   const emptyState = document.getElementById('empty-state');
+  const renderedIds = new Set();
 
   pusher.connection.bind('connected', () => { connBadge.textContent = 'connected'; connBadge.classList.add('connected'); });
   pusher.connection.bind('disconnected', () => { connBadge.textContent = 'disconnected'; connBadge.classList.remove('connected'); });
 
   let allMessages = [];
-  let chatHistory = [];
   let timers = {};
 
   function saveSession() {
     try {
-      localStorage.setItem('gr_messages', JSON.stringify(allMessages));
-      localStorage.setItem('gr_chatHistory', JSON.stringify(chatHistory));
+      localStorage.setItem('gr_comments', JSON.stringify(allMessages));
     } catch {}
   }
 
@@ -275,21 +220,10 @@
     'garamond':  "Garamond, 'Times New Roman', serif"
   };
 
-  channel.bind('message', async data => {
-    addUserMessage(data);
-    await getAIReply(data);
-  });
+  channel.bind('message', data => addComment(data));
 
   channel.bind('clear', () => {
-    allMessages = []; chatHistory = [];
-    localStorage.removeItem('gr_messages');
-    localStorage.removeItem('gr_chatHistory');
-    Object.values(timers).forEach(clearInterval);
-    timers = {};
-    messages.innerHTML = '';
-    messages.appendChild(emptyState);
-    emptyState.style.display = 'flex';
-    msgCount.textContent = '0';
+    resetComments();
   });
 
   channel.bind('requestSync', () => {
@@ -304,18 +238,18 @@
 
   channel.bind('syncAll', data => {
     if (!data.messages || allMessages.length > 0) return;
-    data.messages.forEach(m => {
-      if (m.role === 'ai') addAIMessage(m.text, m);
-      else addUserMessage(m, true);
-    });
+    hydrateComments(data.messages.filter(isCommentRecord));
   });
 
-  function addUserMessage(data, isSynced) {
-    if (!isSynced) {
+  function addComment(data, isSynced) {
+    if (!isCommentRecord(data)) return;
+    if (renderedIds.has(data.id)) return;
+
+    if (!allMessages.some(message => message.id === data.id)) {
       allMessages.push(data);
-      chatHistory.push({ role: 'user', content: data.text });
-      saveSession();
     }
+
+    if (!isSynced) saveSession();
     emptyState.style.display = 'none';
 
     const block = document.createElement('div');
@@ -340,107 +274,14 @@
     block.appendChild(textEl);
     messages.appendChild(block);
     messages.scrollTop = messages.scrollHeight;
+    renderedIds.add(data.id);
 
     timers[data.id] = setInterval(() => {
       const timeEl = block.querySelector('[data-ts]');
       if (timeEl) timeEl.textContent = formatTime(Math.floor((Date.now() - data.ts) / 1000));
     }, 10000);
 
-    updateCount();
-  }
-
-  async function getAIReply(userMsg) {
-    // show thinking indicator
-    const thinkBlock = document.createElement('div');
-    thinkBlock.className = 'msg-block';
-    const thinkMeta = document.createElement('div');
-    thinkMeta.className = 'msg-meta';
-    thinkMeta.innerHTML = `<span class="ai-label">greenroom</span>`;
-    const thinkEl = document.createElement('div');
-    thinkEl.className = 'thinking';
-    thinkEl.innerHTML = `<div class="think-dot"></div><div class="think-dot"></div><div class="think-dot"></div>`;
-    thinkBlock.appendChild(thinkMeta);
-    thinkBlock.appendChild(thinkEl);
-    messages.appendChild(thinkBlock);
-    messages.scrollTop = messages.scrollHeight;
-
-    try {
-      const res = await fetch('/api/rag-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: userMsg.text,
-          history: chatHistory,
-          sessionId: 'tv-main'
-        })
-      });
-      const raw = await res.text();
-      let data;
-      try {
-        data = raw ? JSON.parse(raw) : {};
-      } catch {
-        data = { error: raw || `Request failed with ${res.status}` };
-      }
-      if (!res.ok) throw new Error(data.error || 'RAG chat request failed');
-      const reply = data.reply || '...';
-
-      chatHistory.push({ role: 'assistant', content: reply });
-
-      // replace thinking with real reply
-      thinkBlock.removeChild(thinkEl);
-      const replyEl = document.createElement('div');
-      replyEl.className = 'msg-text ai';
-      replyEl.style.fontFamily = fontMap[userMsg.font] || fontMap['mono'];
-
-      // type out the reply character by character
-      let i = 0;
-      const cur = document.createElement('span');
-      cur.className = 'cursor';
-      replyEl.appendChild(cur);
-      thinkBlock.appendChild(replyEl);
-      messages.scrollTop = messages.scrollHeight;
-
-      const typeInterval = setInterval(() => {
-        if (i < reply.length) {
-          replyEl.insertBefore(document.createTextNode(reply[i]), cur);
-          i++;
-          messages.scrollTop = messages.scrollHeight;
-        } else {
-          clearInterval(typeInterval);
-          replyEl.removeChild(cur);
-          replyEl.classList.add('ai-done');
-        }
-      }, 18);
-
-      const aiRecord = { id: 'ai_' + Date.now(), role: 'ai', text: reply, ts: Date.now() };
-      allMessages.push(aiRecord);
-      saveSession();
-      updateCount();
-
-    } catch (err) {
-      thinkBlock.removeChild(thinkEl);
-      const errEl = document.createElement('div');
-      errEl.className = 'msg-text ai';
-      errEl.textContent = `[error: ${err?.message || 'reaching ai'}]`;
-      thinkBlock.appendChild(errEl);
-    }
-  }
-
-  function addAIMessage(text, data) {
-    emptyState.style.display = 'none';
-    const block = document.createElement('div');
-    block.className = 'msg-block';
-    const meta = document.createElement('div');
-    meta.className = 'msg-meta';
-    meta.innerHTML = `<span class="ai-label">greenroom</span><span class="sep">/</span><span class="time" data-ts="${data.ts}">${formatTime(Math.floor((Date.now()-data.ts)/1000))}</span>`;
-    const textEl = document.createElement('div');
-    textEl.className = 'msg-text ai ai-done';
-    textEl.textContent = text;
-    block.appendChild(meta);
-    block.appendChild(textEl);
-    messages.appendChild(block);
-    messages.scrollTop = messages.scrollHeight;
-    updateCount();
+    updateStats();
   }
 
   function formatTime(secs) {
@@ -449,28 +290,79 @@
     return `${Math.floor(secs/3600)}h ago`;
   }
 
-  function updateCount() {
+  function updateStats() {
     msgCount.textContent = allMessages.length;
+    deviceCount.textContent = String(new Set(allMessages.map(message => message.device)).size);
+  }
+
+  function resetComments() {
+    allMessages = [];
+    clearTimers();
+    renderedIds.clear();
+    localStorage.removeItem('gr_comments');
+    localStorage.removeItem('gr_messages');
+    messages.innerHTML = '';
+    messages.appendChild(emptyState);
+    emptyState.style.display = 'flex';
+    updateStats();
+  }
+
+  function hydrateComments(comments) {
+    resetComments();
+
+    const nextComments = Array.isArray(comments)
+      ? comments.filter(isCommentRecord).sort((left, right) => left.ts - right.ts)
+      : [];
+
+    nextComments.forEach(comment => addComment(comment, true));
+    saveSession();
+  }
+
+  async function loadStoredComments() {
+    try {
+      const res = await fetch('/api/comments');
+      if (!res.ok) throw new Error(`Request failed with ${res.status}`);
+      const data = await res.json();
+      if (Array.isArray(data.comments)) {
+        hydrateComments(data.comments);
+      }
+    } catch {}
+  }
+
+  function clearTimers() {
+    Object.values(timers).forEach(clearInterval);
+    timers = {};
+  }
+
+  function isCommentRecord(record) {
+    return Boolean(record && record.id && typeof record.text === 'string' && record.user && record.device && record.ts && !record.role);
   }
 
   function escHtml(str) {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  // Restore conversation from localStorage on page load
   (function restoreSession() {
     try {
-      const savedMessages = JSON.parse(localStorage.getItem('gr_messages') || '[]');
-      const savedHistory  = JSON.parse(localStorage.getItem('gr_chatHistory') || '[]');
-      if (!Array.isArray(savedMessages) || !savedMessages.length) return;
-      allMessages  = savedMessages;
-      chatHistory  = Array.isArray(savedHistory) ? savedHistory : [];
-      savedMessages.forEach(m => {
-        if (m.role === 'ai') addAIMessage(m.text, m);
-        else addUserMessage(m, true);
-      });
+      const savedComments = JSON.parse(localStorage.getItem('gr_comments') || 'null');
+      const fallbackComments = JSON.parse(localStorage.getItem('gr_messages') || '[]');
+      const initialComments = Array.isArray(savedComments)
+        ? savedComments
+        : Array.isArray(fallbackComments)
+          ? fallbackComments.filter(isCommentRecord)
+          : [];
+
+      if (!initialComments.length) {
+        updateStats();
+        return;
+      }
+
+      allMessages = initialComments;
+      initialComments.forEach(m => addComment(m, true));
     } catch {}
   })();
+
+  loadStoredComments();
 </script>
 </body>
 </html>
